@@ -87,9 +87,12 @@ func cleanProfileLabelAllowlist(in []string) ([]string, string) {
 type projectController struct{}
 
 type CreateProjectRequest struct {
-	Name      string `json:"name" binding:"required"`
-	Framework string `json:"framework" binding:"required"`
+	Name           string `json:"name" binding:"required"`
+	Framework      string `json:"framework" binding:"required"`
+	OrganizationId *int   `json:"organizationId"`
 }
+
+var errNoOrgCreateAccess = errors.New("no create access in target organization")
 
 type UpdateProjectRequest struct {
 	Name                    string    `json:"name" binding:"required"`
@@ -148,6 +151,8 @@ func (p projectController) CreateProject(c *gin.Context) {
 		return
 	}
 
+	userId := middleware.GetUserId(c)
+
 	project, err := db.ExecuteTransaction(func(tx *sql.Tx) (*models.Project, error) {
 		currentProject, err := repositories.ProjectRepository.FindById(tx, projectId)
 		if err != nil {
@@ -156,14 +161,32 @@ func (p projectController) CreateProject(c *gin.Context) {
 		if currentProject == nil || currentProject.OrganizationId == nil {
 			return nil, fmt.Errorf("current project has no organization")
 		}
+
+		targetOrgId := *currentProject.OrganizationId
+		if request.OrganizationId != nil {
+			targetOrgId = *request.OrganizationId
+		}
+
+		role, err := repositories.OrganizationRepository.GetUserRole(tx, targetOrgId, userId)
+		if err != nil {
+			return nil, err
+		}
+		if role == "" || role == "readonly" {
+			return nil, errNoOrgCreateAccess
+		}
+
 		if ProjectLimitHook != nil {
-			if err := ProjectLimitHook(tx, *currentProject.OrganizationId); err != nil {
+			if err := ProjectLimitHook(tx, targetOrgId); err != nil {
 				return nil, err
 			}
 		}
-		return repositories.ProjectRepository.CreateWithOrganization(tx, request.Name, request.Framework, *currentProject.OrganizationId)
+		return repositories.ProjectRepository.CreateWithOrganization(tx, request.Name, request.Framework, targetOrgId)
 	})
 	if err != nil {
+		if errors.Is(err, errNoOrgCreateAccess) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "You don't have permission to create projects in this organization"})
+			return
+		}
 		var limitErr *LimitExceededError
 		if errors.As(err, &limitErr) {
 			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": limitErr.Message})

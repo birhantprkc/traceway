@@ -114,14 +114,10 @@
 	}
 
 	function handleAddProjectClick() {
-		const organizationId =
-			projectsState.currentProject?.organizationId ?? authState.organizations[0]?.id;
-		if (organizationId) {
-			const role = authState.getRoleForOrganization(organizationId);
-			if (role === 'readonly') {
-				toast.error("You're not authorized to perform that action", { position: 'top-center' });
-				return;
-			}
+		const writableOrgs = authState.organizations.filter((o) => o.role !== 'readonly');
+		if (writableOrgs.length === 0) {
+			toast.error("You're not authorized to perform that action", { position: 'top-center' });
+			return;
 		}
 		showAddProjectModal = true;
 	}

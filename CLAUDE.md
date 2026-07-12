@@ -590,7 +590,7 @@ backend/
 | Method | Endpoint | Auth | Purpose |
 |--------|----------|------|---------|
 | GET | `/api/projects` | App | List projects |
-| POST | `/api/projects` | App+Write | Create project |
+| POST | `/api/projects` | App+Write | Create project (optional `organizationId` body field targets another org; the handler re-checks the caller's **org role** in the target org and 403s for non-members/`readonly` — creation is org-scoped, per-project overrides don't grant it) |
 | POST | `/api/projects/source-map-token` | App+Write | Generate source map upload token |
 
 **Dashboard**

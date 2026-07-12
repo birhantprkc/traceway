@@ -162,8 +162,8 @@ class ProjectsState {
         }
     }
 
-    async createProject(name: string, framework: Framework = 'gin'): Promise<ProjectWithToken> {
-        const response = await api.post('/projects', { name, framework }, {
+    async createProject(name: string, framework: Framework = 'gin', organizationId?: number): Promise<ProjectWithToken> {
+        const response = await api.post('/projects', { name, framework, organizationId }, {
             projectId: this.currentProjectId ?? undefined
         });
 
