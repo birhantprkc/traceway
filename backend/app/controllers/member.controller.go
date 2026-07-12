@@ -5,7 +5,6 @@ import (
 	"github.com/tracewayapp/traceway/backend/app/middleware"
 	"github.com/tracewayapp/traceway/backend/app/models"
 	"github.com/tracewayapp/traceway/backend/app/repositories"
-	"database/sql"
 	"net/http"
 	"strconv"
 
@@ -115,6 +114,7 @@ func (c *memberController) RemoveMember(ctx *gin.Context) {
 }
 
 func (c *memberController) GetProjectRoles(ctx *gin.Context) {
+	tx := db.GetTx(ctx)
 	organizationId := middleware.GetOrganizationId(ctx)
 
 	targetUserId, err := strconv.Atoi(ctx.Param("userId"))
@@ -123,40 +123,25 @@ func (c *memberController) GetProjectRoles(ctx *gin.Context) {
 		return
 	}
 
-	type projectRolesData struct {
-		OrgRole      string
-		ProjectRoles []*models.MemberProjectRole
-	}
-
-	data, err := db.ExecuteTransaction(func(tx *sql.Tx) (*projectRolesData, error) {
-		orgRole, err := repositories.OrganizationRepository.GetUserRole(tx, organizationId, targetUserId)
-		if err != nil {
-			return nil, err
-		}
-		if orgRole == "" {
-			return nil, nil
-		}
-
-		projectRoles, err := repositories.ProjectUserRoleRepository.FindByOrganizationAndUser(tx, organizationId, targetUserId)
-		if err != nil {
-			return nil, err
-		}
-
-		return &projectRolesData{OrgRole: orgRole, ProjectRoles: projectRoles}, nil
-	})
-
+	orgRole, err := repositories.OrganizationRepository.GetUserRole(tx, organizationId, targetUserId)
 	if err != nil {
-		ctx.AbortWithError(http.StatusInternalServerError, traceway.NewStackTraceErrorf("Failed to load member project roles: %w", err))
+		ctx.AbortWithError(http.StatusInternalServerError, traceway.NewStackTraceErrorf("Failed to get user role: %w", err))
 		return
 	}
-	if data == nil {
+	if orgRole == "" {
 		ctx.JSON(http.StatusNotFound, gin.H{"error": "User is not a member of this organization"})
 		return
 	}
 
+	projectRoles, err := repositories.ProjectUserRoleRepository.FindByOrganizationAndUser(tx, organizationId, targetUserId)
+	if err != nil {
+		ctx.AbortWithError(http.StatusInternalServerError, traceway.NewStackTraceErrorf("Failed to load member project roles: %w", err))
+		return
+	}
+
 	ctx.JSON(http.StatusOK, gin.H{
-		"orgRole":      data.OrgRole,
-		"projectRoles": data.ProjectRoles,
+		"orgRole":      orgRole,
+		"projectRoles": projectRoles,
 	})
 }
 

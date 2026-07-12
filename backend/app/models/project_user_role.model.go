@@ -10,7 +10,7 @@ type ProjectUserRole struct {
 	Id        int       `json:"id"`
 	ProjectId uuid.UUID `json:"projectId"`
 	UserId    int       `json:"userId"`
-	Role      string    `json:"role"` // user, readonly
+	Role      string    `json:"role"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 

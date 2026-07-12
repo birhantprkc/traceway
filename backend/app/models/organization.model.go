@@ -41,7 +41,6 @@ type UpdateMemberRoleRequest struct {
 	Role string `json:"role" binding:"required,oneof=admin user readonly"`
 }
 
-// UpdateProjectRoleRequest is the request body for setting a member's per-project role override
 type UpdateProjectRoleRequest struct {
 	Role string `json:"role" binding:"required,oneof=default user readonly"`
 }

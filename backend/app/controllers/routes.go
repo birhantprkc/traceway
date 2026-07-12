@@ -51,7 +51,7 @@ func RegisterControllers(router *gin.RouterGroup) {
 	otelGroup.POST("/v1development/profiles", middleware.CORSReport, middleware.UseClientAuth, otelcontrollers.OtelController.ExportProfiles)
 
 	router.GET("/projects", middleware.UseAppAuth, ProjectController.ListProjects)
-	router.POST("/projects", middleware.UseAppAuth, middleware.RequireProjectAccess, middleware.RequireWriteAccess, ProjectController.CreateProject)
+	router.POST("/projects", middleware.UseAppAuth, middleware.RequireProjectAccess, ProjectController.CreateProject)
 	router.PUT("/projects", middleware.UseAppAuth, middleware.RequireProjectAccess, middleware.RequireWriteAccess, ProjectController.UpdateProject)
 	router.DELETE("/projects", middleware.UseAppAuth, middleware.RequireProjectAccess, middleware.RequireWriteAccess, ProjectController.DeleteProject)
 
@@ -172,7 +172,7 @@ func RegisterControllers(router *gin.RouterGroup) {
 
 	router.PUT("/organizations/:organizationId/members/:userId", middleware.UseAppAuth, middleware.RequireAdminAccess, middleware.Transactional, MemberController.UpdateRole)
 	router.DELETE("/organizations/:organizationId/members/:userId", middleware.UseAppAuth, middleware.RequireAdminAccess, middleware.Transactional, MemberController.RemoveMember)
-	router.GET("/organizations/:organizationId/members/:userId/project-roles", middleware.UseAppAuth, middleware.RequireAdminAccess, MemberController.GetProjectRoles)
+	router.GET("/organizations/:organizationId/members/:userId/project-roles", middleware.UseAppAuth, middleware.RequireAdminAccess, middleware.Transactional, MemberController.GetProjectRoles)
 	router.PUT("/organizations/:organizationId/members/:userId/project-roles/:projectId", middleware.UseAppAuth, middleware.RequireAdminAccess, middleware.Transactional, MemberController.UpdateProjectRole)
 
 	router.POST("/organizations/:organizationId/invitations", middleware.UseAppAuth, middleware.RequireAdminAccess, middleware.Transactional, InvitationController.InviteUser)
