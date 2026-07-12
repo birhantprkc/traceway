@@ -2,7 +2,7 @@
 	import './layout.css';
 	import { goto, afterNavigate } from '$app/navigation';
 	import { authState } from '$lib/state/auth.svelte';
-	import { projectsState } from '$lib/state/projects.svelte';
+	import { projectsState, type Project } from '$lib/state/projects.svelte';
 	import { themeState, initTheme, toggleTheme } from '$lib/state/theme.svelte';
 	import { incrementNavDepth, decrementNavDepth } from '$lib/utils/back-navigation';
 	import AppSidebar from '$lib/components/app-sidebar.svelte';
@@ -131,9 +131,44 @@
 		// Optionally navigate to connection page to show token
 		goto('/connection');
 	}
+
+	const multiOrg = $derived(authState.organizations.length > 1);
+
+	const groupedProjects = $derived.by(() => {
+		const groups: { key: string; name: string; projects: Project[] }[] = [];
+		for (const org of authState.organizations) {
+			const projects = projectsState.projects.filter((p) => p.organizationId === org.id);
+			if (projects.length > 0) {
+				groups.push({ key: `org-${org.id}`, name: org.name, projects });
+			}
+		}
+		const knownOrgIds = new Set(authState.organizations.map((o) => o.id));
+		const orphans = projectsState.projects.filter(
+			(p) => !p.organizationId || !knownOrgIds.has(p.organizationId)
+		);
+		if (orphans.length > 0) {
+			groups.push({ key: 'other', name: 'Other', projects: orphans });
+		}
+		return groups;
+	});
 </script>
 
 <svelte:head><title>Traceway</title></svelte:head>
+
+{#snippet projectItem(project: Project, indent: boolean)}
+	<DropdownMenu.Item
+		onclick={() => handleProjectSelect(project.id)}
+		class="flex cursor-pointer items-center justify-between {indent ? 'pl-4' : ''}"
+	>
+		<div class="flex items-center gap-2">
+			<FrameworkIcon framework={project.framework} />
+			<span>{project.name}</span>
+		</div>
+		{#if project.id === projectsState.currentProjectId}
+			<Check class="h-4 w-4" />
+		{/if}
+	</DropdownMenu.Item>
+{/snippet}
 
 <Tooltip.Provider delayDuration={0}>
 <!-- This is not ideal, but because our layout is a top level route it can end up showing sidebar on the login page (after the login before the transition). -->
@@ -157,38 +192,38 @@
 							<ChevronDown size={16} />
 						</DropdownMenu.Trigger>
 						<DropdownMenu.Content align="start" class="w-56">
-							<DropdownMenu.Group>
-								<DropdownMenu.Label>Projects</DropdownMenu.Label>
-								<DropdownMenu.Separator />
-								{#each projectsState.projects as project}
-									<DropdownMenu.Item
-										onclick={() => handleProjectSelect(project.id)}
-										class="flex cursor-pointer items-center justify-between"
-									>
-										<div class="flex items-center gap-2">
-											<FrameworkIcon framework={project.framework} />
-											<span>{project.name}</span>
-										</div>
-										{#if project.id === projectsState.currentProjectId}
-											<Check class="h-4 w-4" />
-										{/if}
-									</DropdownMenu.Item>
+							{#if multiOrg}
+								{#each groupedProjects as group (group.key)}
+									<DropdownMenu.Group>
+										<DropdownMenu.Label class="text-xs text-muted-foreground uppercase">{group.name}</DropdownMenu.Label>
+										{#each group.projects as project (project.id)}
+											{@render projectItem(project, true)}
+										{/each}
+									</DropdownMenu.Group>
 								{/each}
-								{#if projectsState.projects.length === 0}
-									<DropdownMenu.Item disabled>No projects yet</DropdownMenu.Item>
-								{/if}
-								<DropdownMenu.Separator />
-								{#if projectsState.canManageCurrentProject}
-									<DropdownMenu.Item onclick={() => showEditProjectModal = true} class="cursor-pointer">
-										<Pencil class="mr-2 h-4 w-4" />
-										Edit Project
-									</DropdownMenu.Item>
-								{/if}
-								<DropdownMenu.Item onclick={handleAddProjectClick} class="cursor-pointer">
-									<Plus class="mr-2 h-4 w-4" />
-									Add Project
+							{:else}
+								<DropdownMenu.Group>
+									<DropdownMenu.Label>Projects</DropdownMenu.Label>
+									<DropdownMenu.Separator />
+									{#each projectsState.projects as project (project.id)}
+										{@render projectItem(project, false)}
+									{/each}
+								</DropdownMenu.Group>
+							{/if}
+							{#if projectsState.projects.length === 0}
+								<DropdownMenu.Item disabled>No projects yet</DropdownMenu.Item>
+							{/if}
+							<DropdownMenu.Separator />
+							{#if projectsState.canManageCurrentProject}
+								<DropdownMenu.Item onclick={() => showEditProjectModal = true} class="cursor-pointer">
+									<Pencil class="mr-2 h-4 w-4" />
+									Edit Project
 								</DropdownMenu.Item>
-							</DropdownMenu.Group>
+							{/if}
+							<DropdownMenu.Item onclick={handleAddProjectClick} class="cursor-pointer">
+								<Plus class="mr-2 h-4 w-4" />
+								Add Project
+							</DropdownMenu.Item>
 						</DropdownMenu.Content>
 					</DropdownMenu.Root>
 				</h1>

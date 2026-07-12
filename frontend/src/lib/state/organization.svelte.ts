@@ -35,6 +35,18 @@ export interface OrganizationSettings {
     userRole: string;
 }
 
+export interface MemberProjectRole {
+    projectId: string;
+    name: string;
+    framework: string;
+    role: string | null;
+}
+
+export interface MemberProjectRolesResponse {
+    orgRole: string;
+    projectRoles: MemberProjectRole[];
+}
+
 class OrganizationState {
     currentOrganization = $state<Organization | null>(null);
     members = $state<OrganizationMember[]>([]);
@@ -86,6 +98,14 @@ class OrganizationState {
     async removeMember(organizationId: number, userId: number) {
         await api.delete(`/organizations/${organizationId}/members/${userId}`);
         await this.loadSettings(organizationId);
+    }
+
+    async getMemberProjectRoles(organizationId: number, userId: number): Promise<MemberProjectRolesResponse> {
+        return await api.get(`/organizations/${organizationId}/members/${userId}/project-roles`) as MemberProjectRolesResponse;
+    }
+
+    async updateMemberProjectRole(organizationId: number, userId: number, projectId: string, role: string) {
+        await api.put(`/organizations/${organizationId}/members/${userId}/project-roles/${projectId}`, { role });
     }
 
     async updateTimezone(organizationId: number, timezone: string) {

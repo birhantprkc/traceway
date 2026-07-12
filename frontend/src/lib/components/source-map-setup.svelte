@@ -10,8 +10,7 @@
 	import typescript from 'svelte-highlight/languages/typescript';
 	import bash from 'svelte-highlight/languages/bash';
 	import { themeState } from '$lib/state/theme.svelte';
-	import { projectsState } from '$lib/state/projects.svelte';
-	import { authState } from '$lib/state/auth.svelte';
+	import { projectsState, isProjectReadonly } from '$lib/state/projects.svelte';
 
 	type Bundler = 'vite' | 'rollup' | 'webpack';
 
@@ -87,9 +86,7 @@ module.exports = {
 
 	const project = $derived(projectsState.currentProject);
 	const sourceMapToken = $derived(project?.sourceMapToken ?? null);
-	const isReadonly = $derived(
-		authState.getRoleForOrganization(project?.organizationId ?? 0) === 'readonly'
-	);
+	const isReadonly = $derived(isProjectReadonly(project));
 
 	const isFlutter = $derived(project?.framework === 'flutter');
 	const isIOS = $derived(project?.framework === 'ios');

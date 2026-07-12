@@ -5,10 +5,13 @@
     import * as Select from "$lib/components/ui/select";
     import * as AlertDialog from "$lib/components/ui/alert-dialog";
     import { Badge } from "$lib/components/ui/badge";
-    import { UserPlus, Trash2 } from "@lucide/svelte";
+    import { UserPlus, Trash2, ChevronRight, ChevronDown } from "@lucide/svelte";
     import { toast } from 'svelte-sonner';
-    import { organizationState, type OrganizationMember, type Invitation } from '$lib/state/organization.svelte';
+    import { organizationState, type OrganizationMember, type Invitation, type MemberProjectRole } from '$lib/state/organization.svelte';
     import { authState } from '$lib/state/auth.svelte';
+    import { type Framework } from '$lib/state/projects.svelte';
+    import FrameworkIcon from '$lib/components/framework-icon.svelte';
+    import { LoadingCircle } from '$lib/components/ui/loading-circle';
     import InviteUserDialog from './invite-user-dialog.svelte';
 
     interface Props {
@@ -21,6 +24,10 @@
     let memberToRemove = $state<OrganizationMember | null>(null);
     let invitationToRevoke = $state<Invitation | null>(null);
     let processingRoleChange = $state<number | null>(null);
+    let expandedMemberId = $state<number | null>(null);
+    let memberProjectRoles = $state<Record<number, MemberProjectRole[]>>({});
+    let loadingProjectRoles = $state(false);
+    let processingProjectRole = $state<string | null>(null);
 
     const members = $derived(organizationState.members);
     const invitations = $derived(organizationState.invitations.filter(i => i.status === 'pending'));
@@ -76,6 +83,50 @@
         return true;
     }
 
+    function canExpand(member: OrganizationMember): boolean {
+        return member.role === 'user' || member.role === 'readonly';
+    }
+
+    async function toggleExpand(member: OrganizationMember) {
+        if (expandedMemberId === member.id) {
+            expandedMemberId = null;
+            return;
+        }
+        expandedMemberId = member.id;
+        if (!memberProjectRoles[member.id]) {
+            loadingProjectRoles = true;
+            try {
+                const response = await organizationState.getMemberProjectRoles(organizationId, member.id);
+                memberProjectRoles[member.id] = response.projectRoles;
+            } catch (e) {
+                toast.error(e instanceof Error ? e.message : 'Failed to load project roles', { position: 'top-center' });
+                expandedMemberId = null;
+            } finally {
+                loadingProjectRoles = false;
+            }
+        }
+    }
+
+    function projectRoleLabel(member: OrganizationMember, role: string | null): string {
+        if (!role || role === 'default') {
+            return `Default (${member.role === 'readonly' ? 'Read Only' : 'User'})`;
+        }
+        return role === 'readonly' ? 'Read Only' : 'User';
+    }
+
+    async function handleProjectRoleChange(member: OrganizationMember, projectRole: MemberProjectRole, newRole: string) {
+        processingProjectRole = projectRole.projectId;
+        try {
+            await organizationState.updateMemberProjectRole(organizationId, member.id, projectRole.projectId, newRole);
+            projectRole.role = newRole === 'default' ? null : newRole;
+            toast.success('Successfully updated the Project Role', { position: 'top-center' });
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : 'Failed to update project role', { position: 'top-center' });
+        } finally {
+            processingProjectRole = null;
+        }
+    }
+
     function canRemoveMember(member: OrganizationMember): boolean {
         return member.role !== 'owner';
     }
@@ -114,9 +165,29 @@
                     </Table.Row>
                 </Table.Header>
                 <Table.Body>
-                    {#each members as member}
+                    {#each members as member (member.id)}
                         <Table.Row>
-                            <Table.Cell class="font-medium">{member.name}</Table.Cell>
+                            <Table.Cell class="font-medium">
+                                <div class="flex items-center gap-1">
+                                    {#if canExpand(member)}
+                                        <button
+                                            type="button"
+                                            class="rounded p-0.5 hover:bg-accent"
+                                            title="Per-project access"
+                                            onclick={() => toggleExpand(member)}
+                                        >
+                                            {#if expandedMemberId === member.id}
+                                                <ChevronDown class="h-4 w-4" />
+                                            {:else}
+                                                <ChevronRight class="h-4 w-4" />
+                                            {/if}
+                                        </button>
+                                    {:else}
+                                        <span class="inline-block w-5"></span>
+                                    {/if}
+                                    {member.name}
+                                </div>
+                            </Table.Cell>
                             <Table.Cell>{member.email}</Table.Cell>
                             <Table.Cell>
                                 {#if canChangeRole(member) && member.role !== 'owner'}
@@ -164,6 +235,45 @@
                                 {/if}
                             </Table.Cell>
                         </Table.Row>
+                        {#if expandedMemberId === member.id && canExpand(member)}
+                            <Table.Row class="hover:bg-transparent bg-muted/30">
+                                <Table.Cell colspan={5} class="py-2">
+                                    {#if loadingProjectRoles}
+                                        <div class="flex justify-center py-4">
+                                            <LoadingCircle />
+                                        </div>
+                                    {:else}
+                                        <div class="space-y-1 pl-10 pr-2">
+                                            {#each memberProjectRoles[member.id] ?? [] as projectRole (projectRole.projectId)}
+                                                <div class="flex items-center justify-between gap-4 py-1">
+                                                    <div class="flex items-center gap-2">
+                                                        <FrameworkIcon framework={projectRole.framework as Framework} class="size-4" />
+                                                        <span class="text-sm">{projectRole.name}</span>
+                                                    </div>
+                                                    <Select.Root
+                                                        type="single"
+                                                        value={projectRole.role ?? 'default'}
+                                                        onValueChange={(val) => val && handleProjectRoleChange(member, projectRole, val)}
+                                                        disabled={processingProjectRole === projectRole.projectId}
+                                                    >
+                                                        <Select.Trigger class="w-[200px]">
+                                                            {projectRoleLabel(member, projectRole.role)}
+                                                        </Select.Trigger>
+                                                        <Select.Content>
+                                                            <Select.Item value="default">Default ({member.role === 'readonly' ? 'Read Only' : 'User'})</Select.Item>
+                                                            <Select.Item value="user">User</Select.Item>
+                                                            <Select.Item value="readonly">Read Only</Select.Item>
+                                                        </Select.Content>
+                                                    </Select.Root>
+                                                </div>
+                                            {:else}
+                                                <div class="py-2 text-sm text-muted-foreground">No projects in this organization yet</div>
+                                            {/each}
+                                        </div>
+                                    {/if}
+                                </Table.Cell>
+                            </Table.Row>
+                        {/if}
                     {/each}
                 </Table.Body>
             </Table.Root>

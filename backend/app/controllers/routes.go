@@ -172,6 +172,8 @@ func RegisterControllers(router *gin.RouterGroup) {
 
 	router.PUT("/organizations/:organizationId/members/:userId", middleware.UseAppAuth, middleware.RequireAdminAccess, middleware.Transactional, MemberController.UpdateRole)
 	router.DELETE("/organizations/:organizationId/members/:userId", middleware.UseAppAuth, middleware.RequireAdminAccess, middleware.Transactional, MemberController.RemoveMember)
+	router.GET("/organizations/:organizationId/members/:userId/project-roles", middleware.UseAppAuth, middleware.RequireAdminAccess, MemberController.GetProjectRoles)
+	router.PUT("/organizations/:organizationId/members/:userId/project-roles/:projectId", middleware.UseAppAuth, middleware.RequireAdminAccess, middleware.Transactional, MemberController.UpdateProjectRole)
 
 	router.POST("/organizations/:organizationId/invitations", middleware.UseAppAuth, middleware.RequireAdminAccess, middleware.Transactional, InvitationController.InviteUser)
 	router.GET("/organizations/:organizationId/invitations", middleware.UseAppAuth, middleware.RequireAdminAccess, InvitationController.ListInvitations)

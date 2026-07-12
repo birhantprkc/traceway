@@ -664,6 +664,8 @@ backend/
 | GET | `/api/organizations/:orgId/members` | Admin | List members |
 | PUT | `/api/organizations/:orgId/members/:userId` | Admin | Update member role |
 | DELETE | `/api/organizations/:orgId/members/:userId` | Admin | Remove member |
+| GET | `/api/organizations/:orgId/members/:userId/project-roles` | Admin | List member's per-project role overrides |
+| PUT | `/api/organizations/:orgId/members/:userId/project-roles/:projectId` | Admin | Set/clear a per-project role override |
 
 **Invitations**
 | Method | Endpoint | Auth | Purpose |
@@ -726,6 +728,7 @@ func (c *ReportController) Report(ctx *gin.Context) {
 | `organizations` | Multi-tenant organizations |
 | `organization_users` | Junction table linking users to organizations with roles |
 | `projects` | Project config + tokens, linked to organizations |
+| `project_user_roles` | Per-project role overrides (`user`/`readonly`) for org members |
 | `invitations` | Team invitations with token, role, expiry |
 | `source_maps` | Uploaded source map files (project, version, storage key) |
 | `metric_registry` | Custom metric definitions (type, unit, description) |
@@ -861,15 +864,22 @@ Observability (emitted every 10s via `traceway.CaptureMetric`):
 
 Sustained drops also fire a rate-limited (1/min) `traceway.CaptureException` so overload is visible in the issues feed without flooding it.
 
+#### Users, Organizations & Projects
+
+- **Users to organizations is many-to-many** via `organization_users`, one role per membership. A user joins additional organizations through invitations (`POST /api/invitations/:token/accept-existing` for existing accounts) and, in cloud mode, registration. Login/register/`LoginBundle` return every membership as `Organizations[]` with roles; the frontend keeps them in `authState.organizations` and groups the navbar project selector by organization when there is more than one.
+- **Projects belong to exactly one organization** (`projects.organization_id`). Org membership grants read access to all of the org's projects.
+- **Per-project role overrides** live in `project_user_roles(project_id, user_id, role)` with role `user` or `readonly`. Overrides only apply to members whose org role is `user` or `readonly`; owners and admins always have full access to every org project. Override rows are kept when a member's org role changes (they are inert for owner/admin), and are deleted when the member is removed from the org or the project is deleted. Managed from Settings > Team Members (expand a member row) via `GET/PUT /api/organizations/:orgId/members/:userId/project-roles(/:projectId)`; `PUT` with `role: "default"` clears the override.
+- **Effective project role** (`ProjectRepository.GetEffectiveRole`): the org role if `owner`/`admin`, otherwise the override if present, otherwise the org role. `/api/projects` returns it as `role` on each project and masks `token`/`sourceMapToken` when it resolves to `readonly`; the frontend derives write gating from it (`isProjectReadonly` in `projects.svelte.ts`).
+
 #### Organization Roles
 | Role | Description |
 |------|-------------|
 | `owner` | Full access, can manage organization |
 | `admin` | Full access to projects |
-| `user` | Standard access to projects |
-| `readonly` | Read-only access, cannot create projects or archive exceptions |
+| `user` | Standard access to projects (can be overridden per project to `readonly`) |
+| `readonly` | Read-only access, cannot create projects or archive exceptions (can be overridden per project to `user`) |
 
-The `RequireWriteAccess` middleware blocks write operations for users with `readonly` role.
+Middleware enforcement: `RequireProjectAccess` checks org membership (read access, unaffected by overrides); `RequireWriteAccess` blocks writes when the **effective project role** is `readonly`; `RequireAdminAccess` requires org role `owner`/`admin` for the `:organizationId` route param.
 
 #### Key Columns - transactions
 ```sql

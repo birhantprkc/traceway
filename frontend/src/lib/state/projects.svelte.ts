@@ -81,6 +81,14 @@ export interface Project {
     dropHealthyHealthchecks: boolean;
     healthcheckPaths: string[] | null;
     profileLabelAllowlist: string[] | null;
+    role?: string;
+}
+
+export function isProjectReadonly(project: Project | null): boolean {
+    if (!project) return false;
+    if (project.role) return project.role === 'readonly';
+    if (!project.organizationId) return false;
+    return authState.getRoleForOrganization(project.organizationId) === 'readonly';
 }
 
 export interface ProjectWithToken extends Project {
@@ -105,11 +113,7 @@ class ProjectsState {
         return authState.canManageOrganization(organizationId);
     });
 
-    canWriteCurrentProject = $derived.by(() => {
-        const organizationId = this.currentProject?.organizationId;
-        if (!organizationId) return true;
-        return authState.getRoleForOrganization(organizationId) !== 'readonly';
-    });
+    canWriteCurrentProject = $derived(!isProjectReadonly(this.currentProject));
 
     constructor() {
         $effect.root(() => {

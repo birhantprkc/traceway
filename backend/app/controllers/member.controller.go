@@ -5,10 +5,12 @@ import (
 	"github.com/tracewayapp/traceway/backend/app/middleware"
 	"github.com/tracewayapp/traceway/backend/app/models"
 	"github.com/tracewayapp/traceway/backend/app/repositories"
+	"database/sql"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	traceway "go.tracewayapp.com"
 )
 
@@ -103,7 +105,118 @@ func (c *memberController) RemoveMember(ctx *gin.Context) {
 		return
 	}
 
+	err = repositories.ProjectUserRoleRepository.DeleteByOrganizationAndUser(tx, organizationId, targetUserId)
+	if err != nil {
+		ctx.AbortWithError(http.StatusInternalServerError, traceway.NewStackTraceErrorf("Failed to remove member project roles: %w", err))
+		return
+	}
+
 	ctx.JSON(http.StatusOK, gin.H{"message": "Member removed"})
+}
+
+func (c *memberController) GetProjectRoles(ctx *gin.Context) {
+	organizationId := middleware.GetOrganizationId(ctx)
+
+	targetUserId, err := strconv.Atoi(ctx.Param("userId"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	type projectRolesData struct {
+		OrgRole      string
+		ProjectRoles []*models.MemberProjectRole
+	}
+
+	data, err := db.ExecuteTransaction(func(tx *sql.Tx) (*projectRolesData, error) {
+		orgRole, err := repositories.OrganizationRepository.GetUserRole(tx, organizationId, targetUserId)
+		if err != nil {
+			return nil, err
+		}
+		if orgRole == "" {
+			return nil, nil
+		}
+
+		projectRoles, err := repositories.ProjectUserRoleRepository.FindByOrganizationAndUser(tx, organizationId, targetUserId)
+		if err != nil {
+			return nil, err
+		}
+
+		return &projectRolesData{OrgRole: orgRole, ProjectRoles: projectRoles}, nil
+	})
+
+	if err != nil {
+		ctx.AbortWithError(http.StatusInternalServerError, traceway.NewStackTraceErrorf("Failed to load member project roles: %w", err))
+		return
+	}
+	if data == nil {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "User is not a member of this organization"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"orgRole":      data.OrgRole,
+		"projectRoles": data.ProjectRoles,
+	})
+}
+
+func (c *memberController) UpdateProjectRole(ctx *gin.Context) {
+	tx := db.GetTx(ctx)
+	organizationId := middleware.GetOrganizationId(ctx)
+
+	targetUserId, err := strconv.Atoi(ctx.Param("userId"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+
+	projectId, err := uuid.Parse(ctx.Param("projectId"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid project ID"})
+		return
+	}
+
+	var request models.UpdateProjectRoleRequest
+	if err := ctx.ShouldBindJSON(&request); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	project, err := repositories.ProjectRepository.FindById(tx, projectId)
+	if err != nil {
+		ctx.AbortWithError(http.StatusInternalServerError, traceway.NewStackTraceErrorf("Failed to load project: %w", err))
+		return
+	}
+	if project == nil || project.OrganizationId == nil || *project.OrganizationId != organizationId {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "Project not found in this organization"})
+		return
+	}
+
+	targetRole, err := repositories.OrganizationRepository.GetUserRole(tx, organizationId, targetUserId)
+	if err != nil {
+		ctx.AbortWithError(http.StatusInternalServerError, traceway.NewStackTraceErrorf("Failed to get user role: %w", err))
+		return
+	}
+	if targetRole == "" {
+		ctx.JSON(http.StatusNotFound, gin.H{"error": "User is not a member of this organization"})
+		return
+	}
+	if targetRole == "owner" || targetRole == "admin" {
+		ctx.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Owners and admins always have full access to every project"})
+		return
+	}
+
+	if request.Role == "default" {
+		err = repositories.ProjectUserRoleRepository.Delete(tx, projectId, targetUserId)
+	} else {
+		err = repositories.ProjectUserRoleRepository.Upsert(tx, projectId, targetUserId, request.Role)
+	}
+	if err != nil {
+		ctx.AbortWithError(http.StatusInternalServerError, traceway.NewStackTraceErrorf("Failed to update project role: %w", err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"message": "Project role updated"})
 }
 
 var MemberController = memberController{}

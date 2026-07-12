@@ -43,7 +43,7 @@ func InitRequireWriteAccess() {
 		}
 
 		role, err := db.ExecuteTransaction(func(tx *sql.Tx) (string, error) {
-			return repositories.OrganizationRepository.GetUserRole(tx, *project.OrganizationId, userId)
+			return repositories.ProjectRepository.GetEffectiveRole(tx, projectId, userId)
 		})
 
 		if err != nil {
@@ -51,7 +51,7 @@ func InitRequireWriteAccess() {
 			return
 		}
 
-		if role == "readonly" {
+		if role == "readonly" || role == "" {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Read-only access. Write operations are not permitted."})
 			return
 		}
