@@ -14,6 +14,10 @@ type Cfg struct {
 	PostgresSSLMode  string
 	SQLitePath       string
 
+	DuckDBMemoryLimit         string
+	DuckDBThreads             string
+	DuckDBCheckpointThreshold string
+
 	ClickhouseServer   string
 	ClickhouseDatabase string
 	ClickhouseUsername string
@@ -97,6 +101,10 @@ func LoadFromEnv() *Cfg {
 		PostgresPassword: os.Getenv("POSTGRES_PASSWORD"),
 		PostgresSSLMode:  os.Getenv("POSTGRES_SSLMODE"),
 		SQLitePath:       os.Getenv("SQLITE_PATH"),
+
+		DuckDBMemoryLimit:         os.Getenv("DUCKDB_MEMORY_LIMIT"),
+		DuckDBThreads:             os.Getenv("DUCKDB_THREADS"),
+		DuckDBCheckpointThreshold: os.Getenv("DUCKDB_CHECKPOINT_THRESHOLD"),
 
 		ClickhouseServer:   os.Getenv("CLICKHOUSE_SERVER"),
 		ClickhouseDatabase: os.Getenv("CLICKHOUSE_DATABASE"),

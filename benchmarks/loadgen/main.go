@@ -176,6 +176,7 @@ func main() {
 	writeCheckpoint := func() {
 		out.EndedAt = time.Now().UTC().Format(time.RFC3339)
 		out.ChRestarted = chRestarted.Load()
+		out.SutDied = sutDied.Load()
 		out.computeHeadline()
 		if err := writeReportAtomic(cfg.reportOut, &out); err != nil {
 			fmt.Fprintf(os.Stderr, "checkpoint write failed: %v\n", err)
@@ -204,6 +205,9 @@ func main() {
 		// phases — the final writeCheckpoint after the switch captures
 		// whatever data was collected up to this point.
 		if err := waitForSutHealthy(ctx, cfg.target, cfg.sutHealthTimeoutSeconds); err != nil {
+			if ctx.Err() == nil {
+				sutDied.Store(true)
+			}
 			fmt.Fprintf(stderrPrefix(), "SUT unhealthy after Phase 1 cooldown — skipping Phase 2/3: %v\n", err)
 			break
 		}
@@ -225,6 +229,9 @@ func main() {
 			waitForMergesIdle(ctx, cfg, httpClient, "phase 2 -> phase 3")
 		}
 		if err := waitForSutHealthy(ctx, cfg.target, cfg.sutHealthTimeoutSeconds); err != nil {
+			if ctx.Err() == nil {
+				sutDied.Store(true)
+			}
 			fmt.Fprintf(stderrPrefix(), "SUT unhealthy after Phase 2 cooldown — skipping Phase 3: %v\n", err)
 			break
 		}
@@ -257,6 +264,10 @@ func main() {
 	if chRestarted.Load() {
 		fmt.Fprintln(os.Stderr, "FAILED: ClickHouse restarted during the run; treating result as invalid")
 		os.Exit(1)
+	}
+	// Exit 0 unlike chRestarted: passing steps are still a valid lower bound.
+	if sutDied.Load() {
+		fmt.Fprintln(os.Stderr, "WARNING: SUT died after a failed step and never recovered; headline is a lower bound (cliff not bisected)")
 	}
 }
 
@@ -334,7 +345,7 @@ func waitForMergesIdle(ctx context.Context, cfg config, client *http.Client, lab
 	// and there are no merges to wait for. Without this fast-path the loop
 	// would burn the full --max-merge-idle-wait (default 5m) between every
 	// phase doing nothing useful.
-	if first := fetchCHSnapshot(ctx, cfg, client); !first.Reachable {
+	if first, _ := fetchDeepHealth(ctx, cfg, client); !first.Reachable {
 		fmt.Fprintf(stderrPrefix(), "merge-idle [%s]: CH not reachable (sqlite mode or backend down) — skipping wait\n", label)
 		return
 	}
@@ -350,7 +361,7 @@ func waitForMergesIdle(ctx context.Context, cfg config, client *http.Client, lab
 		if ctx.Err() != nil {
 			return
 		}
-		snap := fetchCHSnapshot(ctx, cfg, client)
+		snap, _ := fetchDeepHealth(ctx, cfg, client)
 		fmt.Fprintf(stderrPrefix(), "merge-idle [%s]: reachable=%t activeMerges=%d partsCount=%d longestMerge=%.1fs\n",
 			label, snap.Reachable, snap.ActiveMerges, snap.PartsCount, snap.LongestMergeSec)
 

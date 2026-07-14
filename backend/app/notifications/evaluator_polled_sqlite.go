@@ -1,4 +1,4 @@
-//go:build !pgch
+//go:build !telemetry_ch
 
 package notifications
 
@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/tracewayapp/traceway/backend/app/db"
 	"github.com/tracewayapp/traceway/backend/app/models"
-	"github.com/tracewayapp/traceway/backend/app/repositories"
+	"github.com/tracewayapp/traceway/backend/app/repositories/telemetry"
 )
 
 type EvalResult struct {
@@ -44,8 +44,8 @@ var polledEvaluators = map[string]RuleEvaluator{
 
 type errorRateConfig struct {
 	ThresholdPercent float64 `json:"thresholdPercent"`
-	LookbackMinutes int     `json:"lookbackMinutes"`
-	MinRequests     int     `json:"minRequests"`
+	LookbackMinutes  int     `json:"lookbackMinutes"`
+	MinRequests      int     `json:"minRequests"`
 }
 
 func evaluateErrorRateThreshold(ctx context.Context, rule *models.NotificationRule, projectId uuid.UUID) (*EvalResult, error) {
@@ -361,12 +361,12 @@ func evaluateNoData(ctx context.Context, rule *models.NotificationRule, projectI
 	if cfg.DataType == "any" {
 		tables := []string{"endpoints", "exception_stack_traces", "metric_points", "tasks"}
 		for _, t := range tables {
-			var maxTs string
+			var maxTs sql.NullString
 			err := db.TelemetryDB.QueryRowContext(ctx,
-				fmt.Sprintf("SELECT COALESCE(MAX(recorded_at), '') FROM %s WHERE project_id = ?", t),
+				fmt.Sprintf("SELECT MAX(recorded_at) FROM %s WHERE project_id = ?", t),
 				pid).Scan(&maxTs)
-			if err == nil && maxTs != "" {
-				if parsed, pErr := time.Parse(time.RFC3339Nano, maxTs); pErr == nil && parsed.After(threshold) {
+			if err == nil && maxTs.Valid && maxTs.String != "" {
+				if parsed, pErr := time.Parse(time.RFC3339Nano, maxTs.String); pErr == nil && parsed.After(threshold) {
 					return &EvalResult{Fired: false}, nil
 				}
 			}
@@ -390,16 +390,16 @@ func evaluateNoData(ctx context.Context, rule *models.NotificationRule, projectI
 		return nil, fmt.Errorf("unknown data type: %s", cfg.DataType)
 	}
 
-	var maxTs string
+	var maxTs sql.NullString
 	err := db.TelemetryDB.QueryRowContext(ctx,
-		fmt.Sprintf("SELECT COALESCE(MAX(recorded_at), '') FROM %s WHERE project_id = ?", table),
+		fmt.Sprintf("SELECT MAX(recorded_at) FROM %s WHERE project_id = ?", table),
 		pid).Scan(&maxTs)
 	if err != nil {
 		return nil, err
 	}
 
-	if maxTs != "" {
-		if parsed, pErr := time.Parse(time.RFC3339Nano, maxTs); pErr == nil && parsed.After(threshold) {
+	if maxTs.Valid && maxTs.String != "" {
+		if parsed, pErr := time.Parse(time.RFC3339Nano, maxTs.String); pErr == nil && parsed.After(threshold) {
 			return &EvalResult{Fired: false}, nil
 		}
 	}
@@ -703,14 +703,20 @@ func computeImpactEndpoints(ctx context.Context, projectId uuid.UUID, minRequest
 		return nil, nil
 	}
 
-	p99s := make(map[string]float64, len(candidates))
-	pRows, err := db.TelemetryDB.QueryContext(ctx, `SELECT endpoint, duration FROM (
+	p99Query := `SELECT endpoint, duration FROM (
 		SELECT endpoint, duration,
 			ROW_NUMBER() OVER (PARTITION BY endpoint ORDER BY duration) AS rn,
 			COUNT(*) OVER (PARTITION BY endpoint) AS cnt
 		FROM endpoints WHERE project_id = ? AND recorded_at >= ? AND recorded_at <= ? AND is_stream = 0
-	) WHERE rn = CAST(0.99 * (cnt - 1) AS INTEGER) + 1`,
-		pid, fromStr, nowStr)
+	) WHERE rn = CAST(0.99 * (cnt - 1) AS INTEGER) + 1`
+	if db.IsDuckDBTelemetry() {
+		p99Query = `SELECT endpoint, CAST(quantile_cont(duration, 0.99) AS BIGINT) as duration
+		FROM endpoints WHERE project_id = ? AND recorded_at >= ? AND recorded_at <= ? AND is_stream = 0
+		GROUP BY endpoint`
+	}
+
+	p99s := make(map[string]float64, len(candidates))
+	pRows, err := db.TelemetryDB.QueryContext(ctx, p99Query, pid, fromStr, nowStr)
 	if err != nil {
 		return nil, err
 	}
@@ -732,7 +738,7 @@ func computeImpactEndpoints(ctx context.Context, projectId uuid.UUID, minRequest
 	for _, c := range candidates {
 		c.p99 = p99s[c.endpoint]
 
-		impact := repositories.ComputeImpactScore(c.endpoint, c.totalCount, c.satisfied, c.tolerating, c.bad, c.clientErrors, c.p99, c.offsetMs)
+		impact := telemetry.ComputeImpactScore(c.endpoint, c.totalCount, c.satisfied, c.tolerating, c.bad, c.clientErrors, c.p99, c.offsetMs)
 		if impact >= minImpactThreshold {
 			c.impact = impact
 			result = append(result, c)
