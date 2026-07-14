@@ -31,6 +31,13 @@ const DEPLOYMENTS = [
       "Single Alpine container with embedded SQLite. No external databases needed. Optional S3 for source maps and recordings.",
   },
   {
+    title: "DuckDB",
+    href: "/server/duckdb",
+    subtitle: "Backend + Frontend + SQLite + DuckDB",
+    description:
+      "Single Debian container with a columnar telemetry store. Same zero-dependency setup as SQLite with far more dashboard headroom.",
+  },
+  {
     title: "Local Setup",
     href: "/server/local-setup",
     subtitle: "Backend + Frontend from source",

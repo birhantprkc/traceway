@@ -4,6 +4,7 @@
   "docker-compose": "Docker Compose",
   "minimal": "Minimal Container",
   "sqlite": "SQLite",
+  "duckdb": "DuckDB",
   "local-setup": "Local Setup",
   "storage": "Blob Storage",
   "haloy": "Haloy",

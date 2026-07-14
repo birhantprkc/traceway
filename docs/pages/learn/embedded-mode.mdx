@@ -6,6 +6,8 @@ Embedded mode runs a full Traceway server inside your Go process — using **SQL
 
 This is intended for **local development only**. For production, use the [Docker Compose](/server/docker-compose) or [minimal](/server/minimal) deployment.
 
+Telemetry storage follows your build tags: a plain `go build` embeds SQLite, and building your app with `-tags telemetry_duckdb` (CGO required) swaps the embedded telemetry store to DuckDB's columnar engine. See [Build Tags](/learn/build-tags).
+
 <Callout type="info">
   **Want to see it in action?** Check out the [full working example on
   GitHub](https://github.com/tracewayapp/traceway/tree/main/examples/embedded-backend-otel)

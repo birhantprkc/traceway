@@ -8,16 +8,16 @@ The Traceway backend uses Go build tags to switch between storage backends and t
 
 | Tag | Purpose |
 |-----|---------|
-| *(none)* / `telemetry_sqlite` | **SQLite** telemetry store — embedded mode. This is the default; `telemetry_sqlite` is accepted as an explicit no-op spelling. |
-| `telemetry_duckdb` | **DuckDB** telemetry store — embedded mode with a columnar engine for much faster dashboard analytics. Requires `CGO_ENABLED=1`. |
-| `telemetry_ch` | **ClickHouse** telemetry store — standalone server mode. |
+| *(none)* / `telemetry_sqlite` | **SQLite** telemetry store: embedded mode. This is the default; `telemetry_sqlite` is accepted as an explicit no-op spelling. |
+| `telemetry_duckdb` | **DuckDB** telemetry store: embedded mode with a columnar engine for much faster dashboard analytics. Requires `CGO_ENABLED=1`. |
+| `telemetry_ch` | **ClickHouse** telemetry store: standalone server mode. |
 
 ### Transactional axis
 
 | Tag | Purpose |
 |-----|---------|
 | *(none)* / `transactional_sqlite` | **SQLite** main database. This is the default; `transactional_sqlite` is accepted as an explicit no-op spelling. |
-| `transactional_pg` | **PostgreSQL** main database — standalone server mode. |
+| `transactional_pg` | **PostgreSQL** main database: standalone server mode. |
 
 ### Other
 
@@ -27,7 +27,7 @@ The Traceway backend uses Go build tags to switch between storage backends and t
 
 ## Supported combinations
 
-Only three combinations are supported, enforced by compile-time guard files in `backend/app/db/` — an unsupported combination fails the build with a descriptive identifier in the error message:
+Only three combinations are supported, enforced by compile-time guard files in `backend/app/db/`; an unsupported combination fails the build with a descriptive identifier in the error message:
 
 | Mode | Tags | Databases |
 |------|------|-----------|
@@ -41,7 +41,7 @@ The legacy `pgch` and `duckdb` tags were renamed to this scheme; passing them fa
 
 ### Embedded mode (SQLite)
 
-No tags needed — a plain `go build` gives you the embedded SQLite backend:
+No tags needed: a plain `go build` gives you the embedded SQLite backend:
 
 ```bash
 cd backend && go build ./cmd/traceway
@@ -55,7 +55,7 @@ This is what library consumers get when they `go get github.com/tracewayapp/trac
 cd backend && CGO_ENABLED=1 go build -tags telemetry_duckdb ./cmd/traceway
 ```
 
-DuckDB links prebuilt glibc static libraries, so this build needs CGO and a glibc-based image (Debian, not Alpine) when containerized — see `Dockerfile.duckdb`.
+DuckDB links prebuilt glibc static libraries, so this build needs CGO and a glibc-based image (Debian, not Alpine) when containerized; see `Dockerfile.duckdb` and the [DuckDB deployment guide](/server/duckdb).
 
 ### Standalone server (ClickHouse + PostgreSQL)
 
@@ -65,15 +65,18 @@ cd backend && go build -tags "transactional_pg telemetry_ch" ./cmd/traceway
 
 Requires `CLICKHOUSE_SERVER`, `POSTGRES_HOST`, and the other environment variables to be configured.
 
-### Docker image
+### Docker images
 
-The Dockerfiles build the frontend and embed it into the Go binary with the standalone tags:
+Each Dockerfile pairs one of the supported tag combinations with a SvelteKit frontend build that gets embedded into the Go binary from `static/frontend/`:
 
-```bash
-go build -tags "transactional_pg telemetry_ch" ./cmd/traceway
-```
+| Dockerfile | Build tags | Published image |
+|------------|-----------|-----------------|
+| `Dockerfile` | `transactional_pg telemetry_ch` | `ghcr.io/tracewayapp/traceway:latest` (all-in-one: ClickHouse + PostgreSQL + backend under supervisord) |
+| `Dockerfile.minimal` | `transactional_pg telemetry_ch` | `ghcr.io/tracewayapp/traceway:minimal` (backend only, external ClickHouse/PostgreSQL) |
+| `Dockerfile.sqlite` | *(none)* | `ghcr.io/tracewayapp/traceway:sqlite` (embedded SQLite, Alpine, CGO-free) |
+| `Dockerfile.duckdb` | `telemetry_duckdb` | `ghcr.io/tracewayapp/traceway:duckdb` (SQLite main + DuckDB telemetry, Debian) |
 
-The frontend is embedded from `static/frontend/` which the Docker build populates from the SvelteKit build output. You don't need to embed the frontend for local development — run the frontend dev server separately with `cd frontend && npm run dev`.
+You don't need to embed the frontend for local development; run the frontend dev server separately with `cd frontend && npm run dev`.
 
 ## Running Tests
 

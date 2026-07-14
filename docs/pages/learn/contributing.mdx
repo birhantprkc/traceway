@@ -62,9 +62,9 @@ Traceway uses Go build tags to switch between storage backends:
 
 | Tag | Purpose |
 |-----|---------|
-| *(none)* | **SQLite** — embedded mode, zero dependencies. This is the default. |
-| `telemetry_duckdb` | **DuckDB telemetry** — embedded mode with a columnar telemetry store. Requires `CGO_ENABLED=1`. |
-| `transactional_pg telemetry_ch` | **ClickHouse + PostgreSQL** — standalone server mode. |
+| *(none)* | **SQLite**: embedded mode, zero dependencies. This is the default. |
+| `telemetry_duckdb` | **DuckDB telemetry**: embedded mode with a columnar telemetry store. Requires `CGO_ENABLED=1`. |
+| `transactional_pg telemetry_ch` | **ClickHouse + PostgreSQL**: standalone server mode. |
 | `localdist` | Embeds the pre-built frontend into the Go binary. Used in Docker builds. |
 
 See the [Build Tags](/learn/build-tags) page for more details.
@@ -201,7 +201,7 @@ Two separate auth systems:
 
 ### Backend Patterns
 
-**Repositories** are singletons (`var FooRepository = &fooRepository{}`) organized on the two storage axes. Telemetry repositories have one implementation per backend under `backend/app/repositories/telemetry/{clickhouse,sqlite,duckdb}/`, selected by the `telemetry_*` build tags; transactional (relational) repositories live under `backend/app/repositories/transactional/{pg,sqlite}/`, selected by the `transactional_*` build tags. Each axis is re-exported through its facade package — callers import `app/repositories/telemetry` or `app/repositories/transactional` (e.g. `telemetry.SpanRepository`, `transactional.UserRepository`) and never a backend package directly.
+**Repositories** are singletons (`var FooRepository = &fooRepository{}`) organized on the two storage axes. Telemetry repositories have one implementation per backend under `backend/app/repositories/telemetry/{clickhouse,sqlite,duckdb}/`, selected by the `telemetry_*` build tags; transactional (relational) repositories live under `backend/app/repositories/transactional/{pg,sqlite}/`, selected by the `transactional_*` build tags. Each axis is re-exported through its facade package; callers import `app/repositories/telemetry` or `app/repositories/transactional` (e.g. `telemetry.SpanRepository`, `transactional.UserRepository`) and never a backend package directly.
 
 **Controllers** use the Gin framework. PostgreSQL operations go through `middleware.Transactional` for automatic commit/rollback.
 
@@ -307,7 +307,7 @@ All pull requests require **at least one approving review** before merging. This
 ### What reviewers look at
 
 - **Correctness** — does the code do what the PR says it does?
-- **Testing** — are the requirements in "Before submitting" met? Repository changes need the ClickHouse + PostgreSQL Docker tests to pass.
+- **Testing**: are the requirements in "Before submitting" met? Repository changes need the ClickHouse + PostgreSQL Docker tests to pass.
 - **Patterns** — does the change follow the conventions in [CLAUDE.md](https://github.com/tracewayapp/traceway/blob/main/CLAUDE.md)? Reviewers will push back on divergence from established patterns.
 - **Scope** — is the PR focused? A small, focused PR is always preferred over one that mixes unrelated changes.
 

@@ -54,7 +54,9 @@ We benchmark the single-binary SQLite build on dedicated Hetzner CCX instances, 
   Where does SQLite actually stop being enough? We pushed the single-binary
   build until it fell over and wrote up exactly where the cliff is and why:
   [Breaking SQLite Traceway](https://tracewayapp.com/blog/break-sqlite-traceway).
-  When you outgrow it, switch to the ClickHouse + PostgreSQL deployment below.
+  When you outgrow it, the DuckDB mode below keeps the single-container shape
+  with far more read headroom, and the ClickHouse + PostgreSQL deployment is
+  the full scale-out path.
 </Callout>
 
 ### Disk
@@ -63,7 +65,7 @@ SQLite stores telemetry on local disk, so disk is the resource to watch, not RAM
 
 ## DuckDB mode (the small one that reads big)
 
-The DuckDB deployment (`Dockerfile.duckdb`) keeps the single-container shape: the main DB stays SQLite, only the telemetry store becomes DuckDB. You get the same zero-dependency operations with dramatically more read headroom - on a 2 vCPU / 8 GB box the metrics dashboard stays under the 5 s threshold at 100M stored points, where SQLite cliffs around 1M.
+The [DuckDB deployment](/server/duckdb) keeps the single-container shape: the main DB stays SQLite, only the telemetry store becomes DuckDB. You get the same zero-dependency operations with dramatically more read headroom - on a 2 vCPU / 8 GB box the metrics dashboard stays under the 5 s threshold at 100M stored points, where SQLite cliffs around 1M.
 
 Two things differ from the SQLite sizing story:
 
