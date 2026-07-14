@@ -102,6 +102,8 @@ cd traceway && docker compose up -d
 
 Point any OTel SDK at `http://localhost/api/otel/v1/traces` (or `/metrics`, `/logs`) and traces start flowing. See the [self-hosting docs](https://docs.tracewayapp.com/server/docker-compose) for production deployment, TLS, and storage configuration.
 
+Prefer a single container with no external databases? The [SQLite image](https://docs.tracewayapp.com/server/sqlite) is the smallest deployment, and the [DuckDB image](https://docs.tracewayapp.com/server/duckdb) keeps the same zero-dependency setup with a columnar telemetry store for far more dashboard headroom (`docker compose -f docker-compose.sqlite.yml up -d` or `-f docker-compose.duckdb.yml`).
+
 **Docker images are cryptographically signed with Cosign.**
 
 ### Embedded mode (inside your Go app)
@@ -218,7 +220,7 @@ Traceway integrates with the tools you already use. Every integration ships trac
 | ------------- | ----------------------------------------------------- |
 | Backend       | Go 1.25, Gin                                          |
 | Frontend      | SvelteKit 2, Svelte 5, Tailwind CSS v4                |
-| Telemetry DB  | ClickHouse (standalone) or SQLite (embedded)          |
+| Telemetry DB  | ClickHouse (standalone), SQLite or DuckDB (embedded)  |
 | Relational DB | PostgreSQL (standalone) or SQLite (embedded)          |
 | Ingest        | OTLP/HTTP (Protobuf + JSON) for traces, metrics, logs |
 

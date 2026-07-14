@@ -227,7 +227,7 @@ func (r *aiTraceRepository) FindGroupedByTraceName(ctx context.Context, projectI
 			sortedDurations[i] = d.Duration
 		}
 
-		lastSeen, _ := time.Parse("2006-01-02 15:04:05", row.LastSeen)
+		lastSeen, _ := time.Parse(time.RFC3339Nano, row.LastSeen)
 
 		stats = append(stats, models.AiTraceStats{
 			TraceName:       row.TraceName,
