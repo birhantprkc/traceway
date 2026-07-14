@@ -2,6 +2,8 @@
 
 The Traceway backend uses Go build tags to switch between storage backends and to embed the frontend. Storage is selected on two independent axes: the **telemetry** store (high-volume, append-only data) and the **transactional** store (relational/config data).
 
+<img src="/db-architecture.png" alt="Traceway database architecture: build-tag axes, main vs telemetry stores" style={{ maxWidth: '100%', height: 'auto' }} />
+
 ## Tags
 
 ### Telemetry axis

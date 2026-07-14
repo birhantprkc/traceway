@@ -26,6 +26,12 @@ Here's how the concepts connect in a typical scheduled/async task:
 3. **Batched and uploaded** → All metrics are batched, compressed, and sent to Traceway with the next collection frame
 4. **Displayed on dashboard** → Metrics appear in configurable widget groups with line charts, area charts, bar charts, single values, and tables — filterable and groupable by tags
 
+## Ingestion pipelines
+
+On the server side all of this arrives through one of two paths: Traceway SDKs (frontend, mobile, and Go) post gzipped collection frames to `/api/report`, while OpenTelemetry-instrumented backends export OTLP to `/api/otel/v1/*`. Both authenticate with the project token, symbolicate stack traces at ingest, and land in the same telemetry store:
+
+<img src="/ingestion-flows.png" alt="Traceway ingestion pipelines" style={{ maxWidth: '100%', height: 'auto' }} />
+
 ## After the data collection
 
 All this data flows to your Traceway dashboard where you can:

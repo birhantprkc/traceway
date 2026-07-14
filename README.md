@@ -29,7 +29,12 @@ Traceway is an **OpenTelemetry-native** observability platform that combines **l
 
 **MIT licensed. No BSL. No "open core."** Every feature is in the box. Self-host it for free, or run it on [Traceway Cloud](https://cloud.tracewayapp.com) if you'd rather not babysit infra.
 
-<img alt="Traceway Dashboard" src="./website/public/images/performance-endpoints-impact-table.png" />
+<table width="100%">
+<tr>
+<td width="50%" valign="top"><img alt="Traceway Issues" src="./.github/screenshots/issues.png" /></td>
+<td width="50%" valign="top"><img alt="Traceway Endpoints" src="./.github/screenshots/endpoints.png" /></td>
+</tr>
+</table>
 
 <p align="center">
   <a href="https://discord.gg/RZq9NT62nc"><b>👋 Join the Traceway Community on Discord →</b></a><br>
@@ -205,12 +210,12 @@ Traceway integrates with the tools you already use. Every integration ships trac
 
 <table width="100%">
 <tr>
-<td width="50%" valign="top"><b>Logs — trace-linked search</b><br><img src="./website/public/images/logs-search-and-detail.png" alt="Logs" /></td>
-<td width="50%" valign="top"><b>Span waterfall</b><br><img src="./website/public/images/traces-spans-waterfall.png" alt="Spans" /></td>
+<td width="50%" valign="top"><b>Logs — trace-linked search</b><br><img src="./.github/screenshots/logs.png" alt="Logs" /></td>
+<td width="50%" valign="top"><b>Span waterfall</b><br><img src="./.github/screenshots/span-waterfall.png" alt="Spans" /></td>
 </tr>
 <tr>
-<td width="50%" valign="top"><b>Metrics — application dashboard</b><br><img src="./website/public/images/metrics-application-dashboard.png" alt="Metrics" /></td>
-<td width="50%" valign="top"><b>Exceptions — grouped & ranked</b><br><img src="./website/public/images/exceptions-grouped-ranked.png" alt="Exceptions" /></td>
+<td width="50%" valign="top"><b>Metrics — application dashboard</b><br><img src="./.github/screenshots/metrics.png" alt="Metrics" /></td>
+<td width="50%" valign="top"><b>Exceptions — grouped & ranked</b><br><img src="./.github/screenshots/issues.png" alt="Exceptions" /></td>
 </tr>
 </table>
 
