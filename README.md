@@ -25,7 +25,7 @@
 
 ---
 
-Traceway is an **OpenTelemetry-native** observability platform that combines **logs, traces, metrics, session replay/RUM, exceptions, and AI tracing** together. Point an OTLP exporter at it and you're in business. No Collector, no glue code, no per-language vendor SDK.
+Traceway is an **OpenTelemetry-native** observability platform. It combines **logs, traces, metrics, session replay/RUM, exceptions, and AI tracing** in one place. Point an OTLP exporter at it and you're in business. No Collector, no glue code, no per-language vendor SDK.
 
 **MIT licensed. No BSL. No "open core."** Every feature is in the box. Self-host it for free, or run it on [Traceway Cloud](https://cloud.tracewayapp.com) if you'd rather not babysit infra.
 
@@ -43,14 +43,14 @@ Traceway is an **OpenTelemetry-native** observability platform that combines **l
 
 ## What's in the box
 
-- **Logs** — Structured, trace-linked, sub-second search. Native OTLP/HTTP ingest from any OTel SDK.
-- **Traces** — End-to-end span waterfalls across every service. Click a log, jump to its span.
-- **Endpoints** — Per-route latency percentiles (P50/P95/P99), throughput, and error rate, ranked by Apdex and a 5-factor impact score.
-- **Metrics** — Host, runtime, and custom metrics. Any dimension, any chart, with custom widget groups.
-- **Exceptions** — SHA-256 normalized stack traces grouped into ranked issues. Source-mapped (webpack, esbuild, Vite).
-- **Profiling** _(experimental)_ — Flame graphs for CPU, heap, and goroutines with version-to-version diffing and a top-functions table. Ingests native Go pprof and OTLP profiles.
-- **Session Replay** — Watch what the user did right before the error. Available for web (any JS framework) and Flutter.
-- **AI Observability** — LLM cost, tokens, latency, and full conversations across providers (OpenRouter and any OTel-compatible AI gateway).
+- **Logs**: Structured, trace-linked, sub-second search. Native OTLP/HTTP ingest from any OTel SDK.
+- **Traces**: End-to-end span waterfalls across every service. Click a log, jump to its span.
+- **Endpoints**: Per-route latency percentiles (P50/P95/P99), throughput, and error rate, ranked by Apdex and a 5-factor impact score.
+- **Metrics**: Host, runtime, and custom metrics. Any dimension, any chart, with custom widget groups.
+- **Exceptions**: Stack traces are normalized, given a SHA-256 fingerprint, and grouped into ranked issues. Source-mapped (webpack, esbuild, Vite).
+- **Profiling** _(experimental)_: Flame graphs for CPU, heap, and goroutines with version-to-version diffing and a top-functions table. Ingests native Go pprof and OTLP profiles.
+- **Session Replay**: Watch what the user did right before the error. Available for web (any JS framework) and Flutter.
+- **AI Observability**: LLM cost, tokens, latency, and full conversations across providers (OpenRouter and any OTel-compatible AI gateway).
 
 Plus: background-task (job) monitoring, configurable alerts (Slack / GitHub / email / webhook / Pushover / Telegram), multi-tenant orgs with role-based access, and a per-endpoint slow-threshold override.
 
@@ -67,7 +67,7 @@ One command installs two skills into Claude Code, Cursor, Codex, or any agent th
 - **`/traceway-setup`** reads your repo and wires it up: OTel for backends, Traceway SDKs for web and mobile. Then it verifies data actually arrives.
 - **`/traceway`** installs the `traceway` CLI and uses it to query exceptions, logs, endpoints, and metrics, from bug report to root cause.
 
-The [CLI](./cli) is designed for agents first: JSON when piped, tables on a TTY, stable error identifiers and exit codes, `--fields` to trim responses. It is read-only apart from archiving exceptions, which requires an explicit `--yes`, so nothing hangs and nothing gets damaged.
+The [CLI](./cli) is designed for agents first: JSON when piped, tables on a TTY, stable error identifiers and exit codes, `--fields` to trim responses. It's read-only apart from archiving exceptions, which needs an explicit `--yes`. Nothing hangs, nothing gets damaged.
 
 The skills are plain Markdown in [`skills/`](./skills), in the same MIT-licensed repo. No marketplace, no lock-in. [Learn more →](https://tracewayapp.com/product/agent-skills)
 
@@ -77,9 +77,9 @@ The skills are plain Markdown in [`skills/`](./skills), in the same MIT-licensed
 
 ## Symbolication
 
-`app.min.js:1:63` tells you nothing. Traceway resolves minified production errors back to the original file, line, and function the moment they arrive, and the same engine does it for stripped and obfuscated mobile crashes: iOS and Swift against the build's dSYM, Android against its R8 `mapping.txt`, Dart and Flutter against their obfuscation map.
+`app.min.js:1:63` tells you nothing. Traceway resolves minified production errors back to the original file, line, and function the moment they arrive. The same engine handles stripped and obfuscated mobile crashes: iOS and Swift against the build's dSYM, Android against its R8 `mapping.txt`, Dart and Flutter against their obfuscation map.
 
-The symbolicator is pure Go and built to keep up with ingest. Every debug artifact (a source map, a dSYM, an R8 mapping) compiles once into a binary `.tw` file and is memory-mapped from disk: under a microsecond to open a compiled map, p99 lookup under a millisecond on a cold cache, zero maps re-parsed after a restart. The corpus is a disk budget, not a RAM budget.
+The symbolicator is pure Go and built to keep up with ingest. Every debug artifact (a source map, a dSYM, an R8 mapping) compiles once into a binary `.tw` file and is memory-mapped from disk. Opening a compiled map takes under a microsecond, p99 lookup stays under a millisecond on a cold cache, and no map is re-parsed after a restart. The corpus is a disk budget, not a RAM budget.
 
 The same engine ships as a standalone [OpenTelemetry Collector processor](./backend/app/symbolicator/otelprocessor), drop-in compatible with Honeycomb's `source_map_symbolicator`: same component type, same attribute contract, same config keys. Use it in your own pipeline, with or without Traceway behind it.
 
@@ -91,7 +91,7 @@ Upload source maps from CI with `npx traceway-sourcemaps --directory ./dist`; dS
 | ------------------------ | -------------------------------- | ----------------------------------------------- | --------------------------------- |
 | **Pricing**              | Per-event, per-host, per-seat    | Free + ops time                                 | Self-host free, fixed cloud tiers |
 | **Setup**                | Vendor SDK per language          | Glue 6 tools together                           | `docker compose up -d`            |
-| **License**              | Proprietary                      | Mixed (some BSL / open-core)                    | **MIT — no asterisks**            |
+| **License**              | Proprietary                      | Mixed (some BSL / open-core)                    | **MIT, no asterisks**             |
 | **OTel**                 | Wrapped in vendor SDK            | OTel Collector required                         | **Native OTLP/HTTP ingest**       |
 | **Replay + traces + AI** | 3 separate products              | Wire it yourself                                | One system, one trace ID          |
 
@@ -107,13 +107,13 @@ cd traceway && docker compose up -d
 
 Point any OTel SDK at `http://localhost/api/otel/v1/traces` (or `/metrics`, `/logs`) and traces start flowing. See the [self-hosting docs](https://docs.tracewayapp.com/server/docker-compose) for production deployment, TLS, and storage configuration.
 
-Prefer a single container with no external databases? The [SQLite image](https://docs.tracewayapp.com/server/sqlite) is the smallest deployment, and the [DuckDB image](https://docs.tracewayapp.com/server/duckdb) keeps the same zero-dependency setup with a columnar telemetry store for far more dashboard headroom (`docker compose -f docker-compose.sqlite.yml up -d` or `-f docker-compose.duckdb.yml`).
+Prefer a single container with no external databases? The [SQLite image](https://docs.tracewayapp.com/server/sqlite) is the smallest deployment. The [DuckDB image](https://docs.tracewayapp.com/server/duckdb) keeps the same zero-dependency setup but adds a columnar telemetry store for far more dashboard headroom. Run either with `docker compose -f docker-compose.sqlite.yml up -d` or `-f docker-compose.duckdb.yml`.
 
 **Docker images are cryptographically signed with Cosign.**
 
 ### Embedded mode (inside your Go app)
 
-Run Traceway inside your Go process — no Docker, no external databases, SQLite under the hood:
+Run Traceway inside your Go process. No Docker, no external databases, SQLite under the hood:
 
 ```bash
 go get github.com/tracewayapp/traceway/backend
@@ -137,7 +137,7 @@ Open `http://localhost:8082`, log in, and hit your app to see traces appear. Ful
 
 ## Supported Integrations
 
-Traceway integrates with the tools you already use. Every integration ships traces, metrics, and logs over **OTLP/HTTP** — no proprietary SDK required.
+Traceway integrates with the tools you already use. Every integration ships traces, metrics, and logs over **OTLP/HTTP**. No proprietary SDK required.
 
 > View the full list in the [documentation](https://docs.tracewayapp.com/client). Missing a framework? [Open an issue](https://github.com/tracewayapp/traceway/issues) to request it.
 
@@ -168,7 +168,7 @@ Traceway integrates with the tools you already use. Every integration ships trac
 
 ### Frontend
 
-> Session Replay is included with every frontend integration — and with Flutter too.
+> Session Replay is included with every frontend integration, and with Flutter too.
 
 <table width="100%">
 <tbody>
@@ -210,12 +210,12 @@ Traceway integrates with the tools you already use. Every integration ships trac
 
 <table width="100%">
 <tr>
-<td width="50%" valign="top"><b>Logs — trace-linked search</b><br><img src="./.github/screenshots/logs.png" alt="Logs" /></td>
+<td width="50%" valign="top"><b>Logs: trace-linked search</b><br><img src="./.github/screenshots/logs.png" alt="Logs" /></td>
 <td width="50%" valign="top"><b>Span waterfall</b><br><img src="./.github/screenshots/span-waterfall.png" alt="Spans" /></td>
 </tr>
 <tr>
-<td width="50%" valign="top"><b>Metrics — application dashboard</b><br><img src="./.github/screenshots/metrics.png" alt="Metrics" /></td>
-<td width="50%" valign="top"><b>Exceptions — grouped & ranked</b><br><img src="./.github/screenshots/issues.png" alt="Exceptions" /></td>
+<td width="50%" valign="top"><b>Metrics: application dashboard</b><br><img src="./.github/screenshots/metrics.png" alt="Metrics" /></td>
+<td width="50%" valign="top"><b>Exceptions: fingerprinted & ranked</b><br><img src="./.github/screenshots/issues.png" alt="Exceptions" /></td>
 </tr>
 </table>
 
@@ -233,23 +233,23 @@ Traceway integrates with the tools you already use. Every integration ships trac
 
 | Directory   | Description                                                                                                                                                                                                                             |
 | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `backend/`  | Go/Gin API server — OTLP ingest, REST API, notifications, migrations                                                                                                                                                                    |
+| `backend/`  | Go/Gin API server: OTLP ingest, REST API, notifications, migrations                                                                                                                                                                    |
 | `frontend/` | SvelteKit 2 dashboard SPA                                                                                                                                                                                                               |
 | `cli/`      | Agent-first `traceway` command line for querying exceptions, logs, endpoints, and metrics                                                                                                                                              |
 | `skills/`   | Agent skills (`/traceway-setup`, `/traceway`) for Claude Code, Cursor, Codex, and any SKILL.md-compatible agent                                                                                                                         |
 | `docs/`     | Documentation site (Nextra)                                                                                                                                                                                                             |
-| `examples/` | Working examples — embedded mode ([OTel](./examples/embedded-backend-otel), [Go client](./examples/embedded-backend-go-client)) and OTel-instrumented apps ([Express](./examples/express-otel), [NestJS](./examples/nestjs-otel), [Next.js](./examples/nextjs-otel), [Hono](./examples/hono-otel)) |
+| `examples/` | Working examples: embedded mode ([OTel](./examples/embedded-backend-otel), [Go client](./examples/embedded-backend-go-client)) and OTel-instrumented apps ([Express](./examples/express-otel), [NestJS](./examples/nestjs-otel), [Next.js](./examples/nextjs-otel), [Hono](./examples/hono-otel)) |
 | `website/`  | Landing page                                                                                                                                                                                                                            |
 
 ## Build Tags
 
-Storage is selected on two axes — the telemetry store and the transactional (relational) store:
+Storage is selected on two axes: the telemetry store and the transactional (relational) store.
 
 | Tag                | Purpose                                                                                                         |
 | ------------------ | --------------------------------------------------------------------------------------------------------------- |
-| _(none)_           | SQLite storage on both axes — embedded mode, zero dependencies. This is the default.                            |
-| `telemetry_duckdb` | DuckDB telemetry store — embedded mode with a columnar engine. Requires `CGO_ENABLED=1`.                        |
-| `transactional_pg telemetry_ch` | ClickHouse (telemetry) + PostgreSQL (config) — standalone server mode.                                      |
+| _(none)_           | SQLite storage on both axes: embedded mode, zero dependencies. This is the default.                             |
+| `telemetry_duckdb` | DuckDB telemetry store: embedded mode with a columnar engine. Requires `CGO_ENABLED=1`.                         |
+| `transactional_pg telemetry_ch` | ClickHouse (telemetry) + PostgreSQL (config) for standalone server mode.                                    |
 | `localdist`        | Embeds frontend from `static/dist/` instead of `static/frontend/`. Used by traceway-cloud to inject billing UI. |
 
 ```bash
@@ -286,20 +286,20 @@ cd backend && go test -v -count=1 ./app/controllers/otelcontrollers/ -args -upda
 
 Full documentation at **[docs.tracewayapp.com](https://docs.tracewayapp.com)**:
 
-- [**Client SDKs**](https://docs.tracewayapp.com/client) — OpenTelemetry, Go, Node.js, Python, and more
-- [**Self-Hosting**](https://docs.tracewayapp.com/server) — Docker Compose and production deployment
-- [**Concepts**](https://docs.tracewayapp.com/learn) — How tracing, exception grouping, metrics, and alerts work
-- [**Embedded Mode**](https://docs.tracewayapp.com/learn/embedded-mode) — Run Traceway inside your Go app
+- [**Client SDKs**](https://docs.tracewayapp.com/client): OpenTelemetry, Go, Node.js, Python, and more
+- [**Self-Hosting**](https://docs.tracewayapp.com/server): Docker Compose and production deployment
+- [**Concepts**](https://docs.tracewayapp.com/learn): How tracing, exception fingerprinting, metrics, and alerts work
+- [**Embedded Mode**](https://docs.tracewayapp.com/learn/embedded-mode): Run Traceway inside your Go app
 
 ## Community
 
-Traceway is built in the open, and the **[Discord community](https://discord.gg/RZq9NT62nc)** is where it happens. Come say hi — whether you're kicking the tires, running it in production, or just curious. We use it to:
+Traceway is built in the open, and the **[Discord community](https://discord.gg/RZq9NT62nc)** is where it happens. Come say hi, whether you're kicking the tires, running it in production, or just curious. We use it to:
 
-- 🗣️ **Talk through ideas** — feature requests, integration asks, roadmap input
-- 🛟 **Help each other out** — setup, OTel wiring, deployment questions
-- 🚀 **Show & tell** — share what you're building and how you're using Traceway
-- 🐛 **Catch bugs early** — report issues and get fast feedback from maintainers
-- 👀 **Get the inside scoop** — sneak peeks at what's shipping next
+- 🗣️ **Talk through ideas**: feature requests, integration asks, roadmap input
+- 🛟 **Help each other out**: setup, OTel wiring, deployment questions
+- 🚀 **Show & tell**: share what you're building and how you're using Traceway
+- 🐛 **Catch bugs early**: report issues and get fast feedback from maintainers
+- 👀 **Get the inside scoop**: sneak peeks at what's shipping next
 
 <p>
   <a href="https://discord.gg/RZq9NT62nc"><img alt="Join the Traceway Community on Discord" src="https://img.shields.io/badge/Join%20the%20Community-on%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" /></a>
@@ -307,11 +307,11 @@ Traceway is built in the open, and the **[Discord community](https://discord.gg/
 
 ## Contribute
 
-Contributions are welcome — pull requests get reviewed and merged. If you're not sure where to start or want to discuss an idea first, [open an issue](https://github.com/tracewayapp/traceway/issues) or drop by the [community Discord](https://discord.gg/RZq9NT62nc) and we'll talk it through.
+Contributions are welcome. Pull requests get reviewed and merged. If you're not sure where to start or want to discuss an idea first, [open an issue](https://github.com/tracewayapp/traceway/issues) or drop by the [community Discord](https://discord.gg/RZq9NT62nc) and we'll talk it through.
 
 ## Links
 
 - [Website](https://tracewayapp.com)
 - [Documentation](https://docs.tracewayapp.com)
-- [Traceway Cloud](https://cloud.tracewayapp.com) — managed hosting (same MIT code, run by us)
-- [Community Discord](https://discord.gg/RZq9NT62nc) — chat with the team and other users
+- [Traceway Cloud](https://cloud.tracewayapp.com): managed hosting (same MIT code, run by us)
+- [Community Discord](https://discord.gg/RZq9NT62nc): chat with the team and other users
