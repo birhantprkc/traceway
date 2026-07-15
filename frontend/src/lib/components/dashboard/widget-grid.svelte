@@ -58,6 +58,18 @@
 
 	const sortedWidgets = $derived([...widgets].sort((a, b) => a.position - b.position));
 
+	function widgetAggregation(widget: Widget): string | null {
+		if (widget.widgetType !== 'gauge' && widget.widgetType !== 'single_value') {
+			return null;
+		}
+		const aggregations = new Set<string>(
+			(widget.config?.sources ?? []).map(
+				(s: { aggregation?: string }) => s.aggregation || 'avg'
+			)
+		);
+		return aggregations.size === 1 ? [...aggregations][0] : null;
+	}
+
 	let dragIndex = $state<number | null>(null);
 	let dropIndex = $state<number | null>(null);
 	let cardEls: HTMLElement[] = [];
@@ -174,6 +186,9 @@
 										class="text-xs font-normal text-muted-foreground"
 									>
 										({widget.config.unit})</span
+									>{/if}{#if widgetAggregation(widget)}<span
+										class="text-xs font-normal text-muted-foreground"
+									>&nbsp;&middot; {widgetAggregation(widget)}</span
 									>{/if}</Card.Title
 							>
 						</div>
