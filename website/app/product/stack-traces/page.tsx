@@ -23,9 +23,9 @@ export default function StackTracesPage() {
             Find and fix issues <em>before your users notice.</em>
           </h1>
           <p className="hero-sub">
-            Every exception, grouped by a 10-step normalization pipeline and
-            SHA-256 hash. Thousands of duplicates collapse into one issue,
-            paired with the session replay or screen recording that caused it.
+            Every exception, normalized and hashed so thousands of duplicates
+            collapse into one issue, paired with the session replay or screen
+            recording that caused it.
           </p>
           <div className="hero-cta-row">
             <Link href="https://docs.tracewayapp.com" className="btn btn-accent">
@@ -49,10 +49,10 @@ export default function StackTracesPage() {
                 Every exception, <em>grouped and ranked</em>
               </>
             }
-            description="Full stack traces, 10-step normalization, SHA-256 grouping. Thousands of duplicates collapse into one ranked issue so you fix what matters first."
+            description="Full stack traces, stable grouping. Thousands of duplicates collapse into one ranked issue so you fix what matters first."
             bullets={[
               "Full stack trace capture with file:line",
-              "Intelligent error grouping via SHA-256 hash",
+              "Intelligent error grouping via a normalized SHA-256 hash",
               "User impact analysis across sessions",
               "Source map resolution for minified JS",
             ]}
@@ -64,17 +64,17 @@ export default function StackTracesPage() {
         <section className="wrap">
           <FeatureRow
             reverse
-            eyebrow="Normalization"
+            eyebrow="Fingerprinting"
             title={
               <>
                 Same bug, <em>same group</em>, every time
               </>
             }
-            description="Traceway normalizes stack traces before hashing, so the same logical error gets grouped together even when runtime values differ. Memory addresses, UUIDs, timestamps, numeric IDs, and ANSI codes are stripped before the hash."
+            description="Traceway computes its own fingerprint for every error: the stack trace is normalized, then hashed. Memory addresses, UUIDs, IPs, numeric IDs, and dependency versions are stripped first, so runtime noise never splits a group. One root cause means one issue instead of thousands, and alerts key on the same hash, so a new-issue alert fires once per real problem and a regression alert means the same failure is genuinely back."
             bullets={[
-              "Stack trace normalization (10-step pipeline)",
-              "Cross-service deduplication",
-              "Full context preserved on every occurrence",
+              "Error type kept, message text and the user data inside it dropped",
+              "Resolved function names excluded, so source maps never reshuffle groups",
+              "New-issue and regression alerts fire per group, not per occurrence",
             ]}
             image={{ src: "/images/stack-trace.png", alt: "Error grouping interface" }}
           />
@@ -119,15 +119,19 @@ export default function StackTracesPage() {
               items={[
                 {
                   q: "How does error grouping work?",
-                  a: "Traceway applies a 10-step normalization pipeline to every stack trace: extracting the error type, removing absolute file paths, replacing hex addresses, UUIDs, IPs, timestamps, and numeric IDs with placeholders, normalizing whitespace, and stripping ANSI codes. The result is hashed with SHA-256 so identical logical errors always group together, even if runtime values differ.",
+                  a: "Every stack trace runs through a normalization pipeline before hashing: the error type is kept while the message text is dropped, absolute paths collapse to file and line, and memory addresses, UUIDs, IPs, emails, numeric IDs, and dependency versions are replaced with placeholders. The result is hashed with SHA-256 into a 16-character fingerprint, so identical logical errors always land in the same issue even when runtime values differ.",
+                },
+                {
+                  q: "Why does grouping matter for alerts?",
+                  a: "Alert rules key on the group. A new-issue rule fires the first time a group is seen, not on every occurrence, and a regression rule fires only when an error you already resolved comes back. Stable grouping is what keeps alerts quiet during a flood of duplicates and loud the moment something genuinely new breaks.",
                 },
                 {
                   q: "How does automatic issue ranking work?",
                   a: "Traceway scores each issue based on how often it occurs, how recently it appeared, and how many users are affected. Issues are continuously re-ranked as new data comes in, so regressions and trending problems surface immediately, with no manual triage required.",
                 },
                 {
-                  q: "How does error grouping handle different environments?",
-                  a: "Traceway normalizes stack traces by removing runtime-specific values like memory addresses, file paths, UUIDs, and timestamps before hashing. This means the same bug produces the same group regardless of which server or environment it occurred on.",
+                  q: "How does grouping handle different environments?",
+                  a: "The normalization strips everything environment-specific: absolute file paths, server addresses, hostnames in URLs, and dependency version suffixes. The same bug produces the same group whether it fired on one server or fifty, in staging or in production.",
                 },
                 {
                   q: "Can I track frontend and mobile errors alongside the backend?",
