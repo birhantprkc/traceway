@@ -19,6 +19,7 @@ import { SkillInstallCommand } from "@/components/skill-install-command";
 import { AgentDebugTerminal } from "@/components/agent-debug-terminal";
 import { StatsStrip } from "@/components/stats-strip";
 import { HeroEmailCTA } from "@/components/hero-email-cta";
+import { HeroCarousel } from "@/components/hero-carousel";
 import { getCalendlyUrl } from "@/lib/calendly";
 import { GITHUB_URL, DISCORD_URL } from "@/lib/links";
 
@@ -103,14 +104,7 @@ export default function Home() {
       {/* PRODUCT: the dashboard itself, then the six pillars as a plain list */}
       <section className="pt-10 pb-24">
         <div className="wrap">
-          <Image
-            src="/images/home-hero-overview.png"
-            alt="Traceway dashboard: endpoints overview with impact scoring"
-            width={2336}
-            height={1532}
-            priority
-            className="w-full h-auto rounded-[12px] border border-hair-2 bg-ink-1"
-          />
+          <HeroCarousel />
 
           <div className="mt-16 grid gap-x-12 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
             {PILLARS.map((pillar) => (
