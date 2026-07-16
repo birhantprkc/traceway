@@ -8,6 +8,8 @@ The same engine runs three ways:
 - **As an [OpenTelemetry Collector processor](/symbolicator/opentelemetry)**, so traces are rewritten before they reach any backend.
 - **As an importable [Go library](/symbolicator/library)**, so you can call it from your own tooling.
 
+<img src="/symbolication-flows.png" alt="Symbolication flows: upload, matching, caching" style={{ maxWidth: '100%', height: 'auto' }} />
+
 ## When and where symbolication runs
 
 Symbolication happens **once, at ingest**. A report arrives, each stack trace is resolved frame by frame, and the **resolved** trace is what gets hashed for grouping and stored. Nothing is re-resolved when you view an issue later.

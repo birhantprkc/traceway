@@ -145,7 +145,7 @@ Rules belong to a project and only evaluate that project's data. Frontend projec
 
 ### New Issue
 
-Fires the first time an error with a given fingerprint is seen. Errors are grouped by a normalized stack trace hash (see [Issues](/learn/issues)), so the same logical error reported many times produces a single alert. If you archive an issue and it occurs again, that first re-occurrence counts as new and fires the rule.
+Fires the first time an error with a given [fingerprint](/learn/issues#fingerprinting) is seen. Errors are grouped by a normalized stack trace hash, so the same logical error reported many times produces a single alert rather than one per occurrence. If you archive an issue and it occurs again, that first re-occurrence counts as new and fires the rule.
 
 The notification includes the error type, stack trace, app version, server name, the endpoint or task it occurred on, and a deep link to the issue.
 
@@ -157,7 +157,7 @@ The cooldown applies per error, not per rule: two different new errors arriving 
 
 ### Error Regression
 
-Fires when an error whose issue was archived (resolved) occurs again. Use this to catch fixes that did not stick. The cooldown applies per error. There is no extra configuration.
+Fires when an error whose issue was archived (resolved) occurs again. Regressions are detected by the same [grouping](/learn/issues#fingerprinting), so the alert means the same failure is back, not that a similar-looking one appeared. Use this to catch fixes that did not stick. The cooldown applies per error. There is no extra configuration.
 
 ### Error Rate
 

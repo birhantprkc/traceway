@@ -272,7 +272,7 @@ traceway {
 						</Button>
 					</div>
 					<div
-						class="overflow-x-auto rounded-lg text-sm {themeState.isDark
+						class="overflow-x-auto rounded-md text-sm {themeState.isDark
 							? 'dark-code'
 							: 'light-code'}"
 					>
@@ -299,7 +299,7 @@ traceway {
 						</Button>
 					</div>
 					<div
-						class="overflow-x-auto rounded-lg text-sm {themeState.isDark
+						class="overflow-x-auto rounded-md text-sm {themeState.isDark
 							? 'dark-code'
 							: 'light-code'}"
 					>
@@ -309,7 +309,8 @@ traceway {
 				<p class="mt-2 text-xs text-muted-foreground">
 					Run from your project root after each release. The uploader auto-discovers build/symbols
 					and pushes every architecture in one go; symbols are unique per build, so re-upload on
-					each release. In CI, pass the token as <code class="font-mono">TRACEWAY_UPLOAD_TOKEN</code>
+					each release. In CI, pass the token as <code class="font-mono">TRACEWAY_UPLOAD_TOKEN</code
+					>
 					instead of the flag.
 				</p>
 			</div>
@@ -329,7 +330,7 @@ traceway {
 						</Button>
 					</div>
 					<div
-						class="overflow-x-auto rounded-lg text-sm {themeState.isDark
+						class="overflow-x-auto rounded-md text-sm {themeState.isDark
 							? 'dark-code'
 							: 'light-code'}"
 					>
@@ -356,7 +357,7 @@ traceway {
 						</Button>
 					</div>
 					<div
-						class="overflow-x-auto rounded-lg text-sm {themeState.isDark
+						class="overflow-x-auto rounded-md text-sm {themeState.isDark
 							? 'dark-code'
 							: 'light-code'}"
 					>
@@ -384,7 +385,7 @@ traceway {
 						</Button>
 					</div>
 					<div
-						class="overflow-x-auto rounded-lg text-sm {themeState.isDark
+						class="overflow-x-auto rounded-md text-sm {themeState.isDark
 							? 'dark-code'
 							: 'light-code'}"
 					>
@@ -392,8 +393,8 @@ traceway {
 					</div>
 				</div>
 				<p class="mt-2 text-xs text-muted-foreground">
-					Add to your app module's <code class="font-mono">build.gradle.kts</code>. The plugin embeds a
-					ProGuard UUID into BuildConfig (matching Honeycomb's
+					Add to your app module's <code class="font-mono">build.gradle.kts</code>. The plugin
+					embeds a ProGuard UUID into BuildConfig (matching Honeycomb's
 					<code class="font-mono">app.debug.proguard_uuid</code>) and names the uploaded mapping
 					<code class="font-mono">&lt;uuid&gt;.txt</code>.
 				</p>
@@ -413,7 +414,7 @@ traceway {
 						</Button>
 					</div>
 					<div
-						class="overflow-x-auto rounded-lg text-sm {themeState.isDark
+						class="overflow-x-auto rounded-md text-sm {themeState.isDark
 							? 'dark-code'
 							: 'light-code'}"
 					>
@@ -422,8 +423,8 @@ traceway {
 				</div>
 				<p class="mt-2 text-xs text-muted-foreground">
 					Uploads the R8 <code class="font-mono">mapping.txt</code> and the unstripped native
-					<code class="font-mono">.so</code> libraries. Native symbols are keyed by GNU build-id, so
-					re-upload on each release.
+					<code class="font-mono">.so</code> libraries. Native symbols are keyed by GNU build-id, so re-upload
+					on each release.
 				</p>
 			</div>
 		{:else}
@@ -443,7 +444,7 @@ traceway {
 							</Button>
 						</div>
 						<div
-							class="overflow-x-auto rounded-lg text-sm {themeState.isDark
+							class="overflow-x-auto rounded-md text-sm {themeState.isDark
 								? 'dark-code'
 								: 'light-code'}"
 						>
@@ -481,7 +482,7 @@ traceway {
 							</Button>
 						</div>
 						<div
-							class="overflow-x-auto rounded-lg text-sm {themeState.isDark
+							class="overflow-x-auto rounded-md text-sm {themeState.isDark
 								? 'dark-code'
 								: 'light-code'}"
 						>
@@ -510,7 +511,7 @@ traceway {
 						</Button>
 					</div>
 					<div
-						class="overflow-x-auto rounded-lg text-sm {themeState.isDark
+						class="overflow-x-auto rounded-md text-sm {themeState.isDark
 							? 'dark-code'
 							: 'light-code'}"
 					>
@@ -531,9 +532,9 @@ traceway {
 			<p class="text-sm text-muted-foreground">
 				Plain release builds already report readable traces. Only obfuscated builds (<code
 					class="rounded bg-muted px-1 py-0.5 font-mono text-xs">--obfuscate</code
-				>) need this: generate a token, then upload your <code
-					class="rounded bg-muted px-1 py-0.5 font-mono text-xs">.symbols</code
-				> after each release to resolve their stack traces.
+				>) need this: generate a token, then upload your
+				<code class="rounded bg-muted px-1 py-0.5 font-mono text-xs">.symbols</code>
+				after each release to resolve their stack traces.
 				<a
 					href="https://docs.tracewayapp.com/client/flutter"
 					target="_blank"
@@ -556,9 +557,9 @@ traceway {
 		{:else if isAndroid}
 			<p class="text-sm text-muted-foreground">
 				Release builds obfuscate Kotlin/Java with R8 and strip native code. Generate a token, then
-				upload your <code class="rounded bg-muted px-1 py-0.5 font-mono text-xs">mapping.txt</code> and
-				native <code class="rounded bg-muted px-1 py-0.5 font-mono text-xs">.so</code> libraries after each
-				release to resolve their stack traces.
+				upload your <code class="rounded bg-muted px-1 py-0.5 font-mono text-xs">mapping.txt</code>
+				and native <code class="rounded bg-muted px-1 py-0.5 font-mono text-xs">.so</code> libraries
+				after each release to resolve their stack traces.
 				<a
 					href="https://docs.tracewayapp.com/symbolicator/android"
 					target="_blank"

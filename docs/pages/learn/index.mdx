@@ -37,3 +37,9 @@ Endpoints, Tasks, and AI Traces all carry an `is_root` flag. A row is **non-root
 <img src="/architecture.png" alt="Traceway Architecture" style={{ maxWidth: '100%', height: 'auto' }} />
 
 See [Data Flow](/learn/data-flow) for how these connect during request processing, task execution, and metrics collection.
+
+## Authentication
+
+Every way in has its own credential: SDKs and OTel exporters use the project token, CI uses the source map token for symbol uploads, the dashboard uses a JWT or a personal access token, the [CLI](/learn/cli-auth) uses a device flow, and [MCP clients](/learn/mcp) use OAuth with PKCE. Role middleware scopes what an authenticated user can do.
+
+<img src="/auth-types.png" alt="Traceway authentication types" style={{ maxWidth: '100%', height: 'auto' }} />

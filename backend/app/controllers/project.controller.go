@@ -1,15 +1,15 @@
 package controllers
 
 import (
-	"github.com/tracewayapp/traceway/backend/app/cache"
-	"github.com/tracewayapp/traceway/backend/app/middleware"
-	"github.com/tracewayapp/traceway/backend/app/models"
-	"github.com/tracewayapp/traceway/backend/app/db"
-	"github.com/tracewayapp/traceway/backend/app/profiling"
-	"github.com/tracewayapp/traceway/backend/app/repositories"
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/tracewayapp/traceway/backend/app/cache"
+	"github.com/tracewayapp/traceway/backend/app/db"
+	"github.com/tracewayapp/traceway/backend/app/middleware"
+	"github.com/tracewayapp/traceway/backend/app/models"
+	"github.com/tracewayapp/traceway/backend/app/profiling"
+	"github.com/tracewayapp/traceway/backend/app/repositories/transactional"
 	"net/http"
 	"regexp"
 	"strings"
@@ -29,27 +29,27 @@ var validFrameworks = map[string]bool{
 	"stdlib":   true,
 	"custom":   true,
 	// JavaScript frameworks
-	"react":   true,
-	"svelte":  true,
-	"vuejs":   true,
-	"nextjs":  true,
-	"nestjs":  true,
-	"express": true,
-	"remix":          true,
-	"jquery":         true,
-	"react-native":   true,
-	"hono":           true,
-	"cloudflare":     true,
-	"opentelemetry":  true,
+	"react":         true,
+	"svelte":        true,
+	"vuejs":         true,
+	"nextjs":        true,
+	"nestjs":        true,
+	"express":       true,
+	"remix":         true,
+	"jquery":        true,
+	"react-native":  true,
+	"hono":          true,
+	"cloudflare":    true,
+	"opentelemetry": true,
 	// PHP frameworks
-	"symfony":        true,
-	"laravel":        true,
+	"symfony": true,
+	"laravel": true,
 	// Python frameworks
-	"django":         true,
+	"django": true,
 	// Mobile frameworks
-	"flutter":        true,
-	"android":        true,
-	"ios":            true,
+	"flutter": true,
+	"android": true,
+	"ios":     true,
 }
 
 // Project name validation regex: allows alphanumeric, spaces, hyphens, and underscores
@@ -87,7 +87,7 @@ func cleanProfileLabelAllowlist(in []string) ([]string, string) {
 type projectController struct{}
 
 type CreateProjectRequest struct {
-	Name           string `json:"name" binding:"required"`
+	Name           string `json:"name"`
 	Framework      string `json:"framework" binding:"required"`
 	OrganizationId *int   `json:"organizationId"`
 }
@@ -110,7 +110,7 @@ func (p projectController) ListProjects(c *gin.Context) {
 	userId := middleware.GetUserId(c)
 
 	projectsWithBackendUrl, err := db.ExecuteTransaction(func(tx *sql.Tx) ([]*models.ProjectWithBackendUrl, error) {
-		return repositories.ProjectRepository.FindAllWithBackendUrlByUserId(tx, userId)
+		return transactional.ProjectRepository.FindAllWithBackendUrlByUserId(tx, userId)
 	})
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, traceway.NewStackTraceErrorf("error fetching projects: %w", err))
@@ -131,17 +131,17 @@ func (p projectController) CreateProject(c *gin.Context) {
 	// Validate project name
 	nameLen := utf8.RuneCountInString(request.Name)
 	if nameLen < 1 || nameLen > 100 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Project name must be between 1 and 100 characters"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Project name must be between 1 and 100 characters"})
 		return
 	}
 	if !projectNameRegex.MatchString(request.Name) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Project name can only contain letters, numbers, spaces, hyphens, and underscores"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Project name can only contain letters, numbers, spaces, hyphens, and underscores"})
 		return
 	}
 
 	if !validFrameworks[request.Framework] {
 		traceway.CaptureMessage("Invalid framework received: " + request.Framework)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Framework must be one of: gin, fiber, chi, fasthttp, stdlib, custom, react, svelte, vuejs, jquery, react-native, hono, cloudflare, opentelemetry, symfony, laravel, django, flutter, android, ios"})
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Framework must be one of: gin, fiber, chi, fasthttp, stdlib, custom, react, svelte, vuejs, jquery, react-native, hono, cloudflare, opentelemetry, symfony, laravel, django, flutter, android, ios"})
 		return
 	}
 
@@ -154,7 +154,7 @@ func (p projectController) CreateProject(c *gin.Context) {
 	userId := middleware.GetUserId(c)
 
 	project, err := db.ExecuteTransaction(func(tx *sql.Tx) (*models.Project, error) {
-		currentProject, err := repositories.ProjectRepository.FindById(tx, projectId)
+		currentProject, err := transactional.ProjectRepository.FindById(tx, projectId)
 		if err != nil {
 			return nil, err
 		}
@@ -167,7 +167,7 @@ func (p projectController) CreateProject(c *gin.Context) {
 			targetOrgId = *request.OrganizationId
 		}
 
-		role, err := repositories.OrganizationRepository.GetUserRole(tx, targetOrgId, userId)
+		role, err := transactional.OrganizationRepository.GetUserRole(tx, targetOrgId, userId)
 		if err != nil {
 			return nil, err
 		}
@@ -180,7 +180,7 @@ func (p projectController) CreateProject(c *gin.Context) {
 				return nil, err
 			}
 		}
-		return repositories.ProjectRepository.CreateWithOrganization(tx, request.Name, request.Framework, targetOrgId)
+		return transactional.ProjectRepository.CreateWithOrganization(tx, request.Name, request.Framework, targetOrgId)
 	})
 	if err != nil {
 		if errors.Is(err, errNoOrgCreateAccess) {
@@ -273,7 +273,7 @@ func (p projectController) UpdateProject(c *gin.Context) {
 	}
 
 	project, err := db.ExecuteTransaction(func(tx *sql.Tx) (*models.Project, error) {
-		return repositories.ProjectRepository.Update(tx, projectId, request.Name, request.Framework, request.DropHealthyHealthchecks, healthcheckPaths, profileLabelAllowlist)
+		return transactional.ProjectRepository.Update(tx, projectId, request.Name, request.Framework, request.DropHealthyHealthchecks, healthcheckPaths, profileLabelAllowlist)
 	})
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, traceway.NewStackTraceErrorf("error updating project: %w", err))
@@ -299,7 +299,7 @@ func (p projectController) DeleteProject(c *gin.Context) {
 	}
 
 	nameMatched, err := db.ExecuteTransaction(func(tx *sql.Tx) (bool, error) {
-		project, err := repositories.ProjectRepository.FindById(tx, projectId)
+		project, err := transactional.ProjectRepository.FindById(tx, projectId)
 		if err != nil {
 			return false, err
 		}
@@ -309,7 +309,7 @@ func (p projectController) DeleteProject(c *gin.Context) {
 		if project.Name != request.Name {
 			return false, nil
 		}
-		if err := repositories.ProjectRepository.Delete(tx, projectId); err != nil {
+		if err := transactional.ProjectRepository.Delete(tx, projectId); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -336,7 +336,7 @@ func (p projectController) GenerateSourceMapToken(c *gin.Context) {
 	}
 
 	token, err := db.ExecuteTransaction(func(tx *sql.Tx) (string, error) {
-		return repositories.ProjectRepository.GenerateSourceMapToken(tx, projectId)
+		return transactional.ProjectRepository.GenerateSourceMapToken(tx, projectId)
 	})
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, traceway.NewStackTraceErrorf("failed to generate source map token: %w", err))

@@ -16,7 +16,7 @@ Traceway is an error tracking and monitoring platform consisting of:
 
 - **No pointless comments**: Do not add comments that simply describe what the code does. The code should be self-explanatory. Only add comments when explaining non-obvious "why" decisions.
 - **No `py-4` in dialog form content**: Do not add `py-4` on the content wrapper inside `AlertDialog` or `Dialog` components — it creates too much blank space between the form and the action buttons.
-- **Dialog button labels & toasts**: For form dialogs, use descriptive button labels with icons instead of generic "Create"/"Update". Create actions: `<Plus icon> {Action} {Entity}` (e.g., "+ New Widget Group"). Update actions: `<Check icon> Update {Entity}`. After successful create/update, show a `toast.success('Successfully {action} the {Entity}', { position: 'top-center' })`. The button should only be `disabled` during the loading state — never disable it to enforce validation; let the backend return 422 and show the error in the dialog instead.
+- **Dialog button labels & toasts**: For form dialogs, use descriptive button labels with icons instead of generic "Create"/"Update". The `{Entity}` is always a platform entity, capitalized (Project, Widget, Widget Group, Channel, Rule, Token, Invitation, ...). Create actions: `<Plus icon> New {Entity}` with `variant="success"`. Update actions: `<Check icon> Update {Entity}` with the default (primary) variant. Delete/revoke/remove confirm buttons: `<Trash2 icon> Delete {Entity}` (or `Revoke {Entity}` / `Remove {Entity}`) with `variant="destructive"`. After success, show `toast.success('Successfully created the {Entity}', { position: 'top-center' })` for creates and `'Successfully updated the {Entity}'` for updates. The button should only be `disabled` during the loading state — never disable it to enforce validation; let the backend return 422 and show the error in the dialog instead.
 
 ---
 
@@ -86,7 +86,7 @@ All PostgreSQL operations should use `ExecuteTransaction` for automatic commit/r
 
 project, err := pgdb.ExecuteTransaction(func(tx *sql.Tx) (*models.Project, error) {
     // All repository calls receive the transaction
-    return repositories.ProjectRepository.FindById(tx, id)
+    return transactional.ProjectRepository.FindById(tx, id)
 })
 ```
 
@@ -103,7 +103,7 @@ func (c *AuthController) Register(ctx *gin.Context) {
     tx := middleware.GetTx(ctx)  // Get transaction from context
 
     // Use tx for all repository calls
-    user, err := repositories.UserRepository.FindByEmail(tx, email)
+    user, err := transactional.UserRepository.FindByEmail(tx, email)
     if err != nil {
         ctx.JSON(500, gin.H{"error": err.Error()})
         return  // Transaction auto-rolls back on non-success status
@@ -201,7 +201,7 @@ func (r *userRepository) CountByOrganization(tx *sql.Tx, orgID uuid.UUID) (int, 
 
 ```go
 // CORRECT - check for nil
-user, err := repositories.UserRepository.FindByEmail(tx, email)
+user, err := transactional.UserRepository.FindByEmail(tx, email)
 if err != nil {
     return nil, err  // actual database error
 }
@@ -211,7 +211,7 @@ if user == nil {
 }
 
 // WRONG - do not use sql.ErrNoRows with lit
-user, err := repositories.UserRepository.FindByEmail(tx, email)
+user, err := transactional.UserRepository.FindByEmail(tx, email)
 if err == sql.ErrNoRows {  // This won't work with lit!
     // ...
 }
@@ -251,6 +251,11 @@ POSTGRES_DATABASE=traceway
 POSTGRES_USERNAME=traceway
 POSTGRES_PASSWORD=
 POSTGRES_SSLMODE=disable
+
+# DuckDB telemetry backend (only with -tags telemetry_duckdb build; see "DuckDB Telemetry Backend" below)
+DUCKDB_MEMORY_LIMIT=                  # e.g. 4GB. Unset = DuckDB auto-tunes (~80% RAM). Set explicitly in memory-capped containers to avoid OOM.
+DUCKDB_THREADS=                       # e.g. 4. Unset = DuckDB auto-tunes (= cores). Cap in constrained/shared environments.
+DUCKDB_CHECKPOINT_THRESHOLD=          # e.g. 256MB. Unset = DuckDB default (16MB). Raise under sustained ingest to reduce WAL checkpoint stalls; costs a larger WAL and longer restart replay.
 
 # Notifications
 NOTIFICATION_POLL_SECONDS=60          # polled rule evaluation interval; minimum 5, invalid values fall back to 60
@@ -780,10 +785,23 @@ for _, item := range items {
 - `backend/app/migrations/sqlite/` — runs on `db.DB` (main)
 - `backend/app/migrations/sqlite_telemetry/` — runs on `db.TelemetryDB` (telemetry)
 
-**SQLite-specific type helpers** (`backend/app/repositories/sqlite_types.go`):
+**SQLite-specific type helpers** (`backend/app/repositories/telemetry/sqlitetypes/`):
 - `SQLiteTime` — implements `sql.Scanner`/`driver.Valuer` for `time.Time` ↔ SQLite TEXT
 - `SQLiteJSONMap` — implements `sql.Scanner`/`driver.Valuer` for `map[string]string` ↔ SQLite JSON TEXT
 - Row types (e.g., `endpointRow`, `taskRow`) wrap domain models with these types for lit compatibility
+
+#### DuckDB Telemetry Backend (self-hosted, opt-in)
+
+Built with `-tags telemetry_duckdb` (`CGO_ENABLED=1` required), this is an alternative telemetry store for the same `DB_TYPE=sqlite` deployment: the **main DB stays SQLite** (`db.DB`, relational/config), while the **telemetry DB becomes DuckDB** (`db.TelemetryDB`, columnar). It exists because DuckDB's columnar engine is dramatically faster on the analytics/aggregation reads the dashboard issues — at 10M rows it clears read-probe thresholds that SQLite times out on. Backends are selected on two build-tag axes: `telemetry_ch` / `telemetry_duckdb` / *(none = SQLite telemetry)* for the telemetry store and `transactional_pg` / *(none = SQLite main)* for the relational store. Only three combinations are supported — *(no tags)* dual SQLite, `telemetry_duckdb`, and `transactional_pg telemetry_ch` — enforced by compile-time guard files in `backend/app/db/` (stale `pgch`/`duckdb`/`oltp_*` tags also fail with a rename message). Repositories are organized on the same two axes: telemetry repositories live in per-backend packages `backend/app/repositories/telemetry/{clickhouse,sqlite,duckdb}/` and transactional (relational) repositories in `backend/app/repositories/transactional/{pg,sqlite}/`, each re-exported as singletons through tag-guarded facade files at the axis package root (`telemetry/telemetry_ch.go` etc., `transactional/transactional_pg.go` etc.). Consumers import the facade packages — `telemetry.SpanRepository`, `transactional.UserRepository` — never a backend package directly. Helpers shared by all telemetry backends are in `telemetry/shared/`, the SQLite scan/value types shared by the sqlite+duckdb backends are in `telemetry/sqlitetypes/`, and helpers/types shared by the transactional backends (auth-token hashing/time formats, facade-crossing structs) are in `transactional/shared/`. The `transactional/pg` and `transactional/sqlite` implementations are intentionally kept dialect-neutral (lit `:name` queries rendered per `db.Driver`), enforced byte-for-byte by `transactional/parity_test.go`. Running Postgres requires the `transactional_pg` build: the default build's migration runner applies SQLite-dialect migrations unconditionally, so `DB_TYPE=postgres` without the tag is not a supported combination.
+
+- **Driver:** `github.com/duckdb/duckdb-go/v2` (the official driver; marcboeker/go-duckdb is deprecated). Bundles prebuilt static libs for glibc only — **not musl/Alpine**, so the image uses Debian (`Dockerfile.duckdb`).
+- **Opened in** `backend/app/db/db_telemetry_duckdb.go`: telemetry path is the SQLite path with `.db` swapped for `_telemetry.duckdb`. By default DuckDB auto-tunes to the host; `DUCKDB_MEMORY_LIMIT`/`DUCKDB_THREADS`/`DUCKDB_CHECKPOINT_THRESHOLD` (passed through as DSN config options) let operators cap memory/threads so a memory-capped container doesn't read the host's RAM and OOM-kill the backend, and raise the WAL checkpoint threshold (default 16MB) so sustained Appender ingest isn't stalled by frequent checkpoints. `preserve_insertion_order=false` is always set — telemetry reads all have explicit ORDER BY, and dropping the guarantee lets DuckDB parallelize bulk loads and large scans with less memory. The read pool is bounded (`SetMaxOpenConns(duckDBMaxReadConns)`) since each DuckDB connection can use all threads + its own query memory; Appender writes use their own `DuckDBConnector.Connect()` connections and bypass that cap. Exposes `db.DuckDBConnector` (needed for the Appender).
+- **Writes use the Appender API**, not `INSERT` (`duckdb.NewAppenderFromConn(conn, "", table)` → `AppendRow(...)` → `Close()` flushes). Upserts still go through `ExecContext` with `ON CONFLICT`. The Appender rejects typed `*string` for nullable VARCHAR — use `nullableString()` in `backend/app/repositories/telemetry/duckdb/helpers.go` (returns untyped `nil` or the dereferenced value).
+- **Write-path observability:** a row the Appender rejects is dropped rather than failing the whole frame (the SQLite backend 500s instead), so a poison row cannot wedge the SDK's retry loop. Every drop increments a per-table counter (`db.RecordTelemetryRowDropped`) and fires a rate-limited (1/min per table) `traceway.CaptureException`; Appender flush/connect failures still propagate to the request (500, SDK retries) and increment an insert-failure counter. `GET /api/health/deep` (App auth, all telemetry backends) exposes `telemetryBackend`, `droppedRows` per table, `droppedRowsTotal`, `insertFailures`, and on DuckDB an `engine` object (db/WAL file bytes, `duckdb_memory()` usage, read-pool in-use/wait stats) alongside its existing ClickHouse fields; it 503s only when the configured telemetry backend is ClickHouse and CH is unreachable (the embedded backends answer 200 with `chReachable:false`). The benchmark loadgen polls it before/after every ramp step and fails any step whose drop delta is nonzero; read-probe fills record cumulative `droppedRows` per fill level. When `MONITORING_TRACEWAY_URL` is set, `monitoring.StartTelemetryDBReporter` also emits `traceway.duckdb.*` metrics every 10s: `rows_dropped.delta`, `insert_failures.delta`, `db_size_mb`, `wal_size_mb`, `memory_used_mb`, `read_pool.in_use`, `read_pool.wait_count.delta`, `read_pool.wait_ms.delta`. The hourly retention worker issues a `CHECKPOINT` after its deletes so retention actually reclaims disk (DuckDB otherwise defers reclamation to the WAL checkpoint threshold).
+- **`lit` placeholders:** `db.Driver` stays `lit.SQLite`, which emits `?` — DuckDB accepts these, so no separate driver was needed for reads.
+- **Migrations:** `backend/app/migrations/duckdb_telemetry/` (mirrors `sqlite_telemetry/` table-for-table; integer columns are `BIGINT`, JSON is `VARCHAR`, no secondary indexes since it's columnar).
+- **Dialect gotchas vs SQLite** (the read queries differ): native `quantile_cont(col, p)` for P50/P95/P99 instead of fetch-and-sort; `strftime('%s',col)`→`epoch(col)`; time bucketing via `time_bucket(to_seconds(N), col, TIMESTAMP '1970-01-01')` — the explicit epoch origin is required because DuckDB anchors sub-day buckets at 2000-01-03 by default, which would misalign chart buckets against the SQLite backend's epoch-floored buckets for any interval that doesn't evenly divide a day; `json_extract`→`json_extract_string`; `json_each`→`LATERAL unnest(json_keys(x))`; strict GROUP BY needs `ANY_VALUE`/`arg_max`; `SUM` returns HUGEINT (CAST to BIGINT); `CAST(.. AS REAL)`→`CAST(.. AS DOUBLE)`.
+- **Tests:** `backend/app/repositories/telemetry/testhelper_duckdb_test.go` (tagged `telemetry_duckdb`) provides `setupTestDB` so the entire existing telemetry test suite runs against an in-memory DuckDB.
 
 #### Data Retention
 
@@ -925,7 +943,7 @@ backend/app/migrations/ch/
 
 ### Exception Hash Normalization
 
-The backend normalizes stack traces before hashing to group identical errors despite different runtime values. This happens in `backend/app/repositories/exceptions.go`.
+The backend normalizes stack traces before hashing to group identical errors despite different runtime values. This happens in `backend/app/controllers/clientcontrollers/client.controller.go`.
 
 **Normalization Steps:**
 1. Extract error type only (remove error message content)
@@ -950,17 +968,17 @@ The backend normalizes stack traces before hashing to group identical errors des
 ### Repository Patterns
 
 #### Singleton Pattern
-Repositories are exported as package-level singletons for simple access:
+Repositories are exported as package-level singletons, re-exported per storage axis through the facade packages `app/repositories/transactional` and `app/repositories/telemetry`:
 ```go
-// backend/app/repositories/users.go
+// backend/app/repositories/transactional/sqlite/user.repository.go (and the pg/ twin)
 var UserRepository = userRepository{}
 
-// backend/app/repositories/projects.go
-var ProjectRepository = projectRepository{}
+// backend/app/repositories/transactional/transactional_sqlite.go (tag-guarded facade)
+var UserRepository = sqliterepo.UserRepository
 
 // Usage in controllers
-user, err := repositories.UserRepository.FindByEmail(tx, email)
-project, err := repositories.ProjectRepository.FindById(tx, id)
+user, err := transactional.UserRepository.FindByEmail(tx, email)
+spans, err := telemetry.SpanRepository.FindByTraceId(projectId, traceId)
 ```
 
 #### Batch Insert (ClickHouse)
@@ -1244,37 +1262,52 @@ traceway.Init(appName, connectionString,
 
 ### Data Format (Frame)
 
-The SDK sends data as gzipped JSON:
+The SDK sends data as gzipped JSON. The wire shape is `ReportRequest` in `backend/app/controllers/clientcontrollers/client.controller.go` wrapping `CollectionFrame` from `backend/app/models/clientmodels/`:
+
 ```json
 {
-  "app": "myapp",
-  "transactions": [
+  "appVersion": "1.2.3",
+  "serverName": "myapp-host-1",
+  "collectionFrames": [
     {
-      "trace_id": "abc123",
-      "endpoint": "GET /api/users",
-      "duration_ms": 45.2,
-      "status_code": 200,
-      "timestamp": "2024-01-15T10:30:00Z"
-    }
-  ],
-  "exceptions": [
-    {
-      "type": "RuntimeError",
-      "value": "connection refused",
-      "stacktrace": "...",
-      "tags": {"user_id": "123"},
-      "timestamp": "2024-01-15T10:30:00Z"
-    }
-  ],
-  "metrics": [
-    {
-      "name": "cpu.used_pcnt",
-      "value": 45.2,
-      "timestamp": "2024-01-15T10:30:00Z"
+      "traces": [
+        {
+          "id": "5b8e1a2f-3c4d-4e5f-8a9b-0c1d2e3f4a5b",
+          "endpoint": "GET /api/users",
+          "duration": 45200000,
+          "statusCode": 200,
+          "recordedAt": "2024-01-15T10:30:00Z",
+          "isTask": false,
+          "attributes": {},
+          "spans": []
+        }
+      ],
+      "stackTraces": [
+        {
+          "stackTrace": "RuntimeError: connection refused\n  at ...",
+          "recordedAt": "2024-01-15T10:30:00Z",
+          "attributes": {"user_id": "123"},
+          "isMessage": false,
+          "isTask": false
+        }
+      ],
+      "metrics": [
+        {
+          "name": "cpu.used_pcnt",
+          "value": 45.2,
+          "recordedAt": "2024-01-15T10:30:00Z",
+          "tags": {}
+        }
+      ]
     }
   ]
 }
 ```
+
+Notes:
+- Timestamps are `recordedAt` (RFC 3339), never `timestamp`. `duration` is a Go `time.Duration`, i.e. integer nanoseconds (45200000 = 45.2ms).
+- Endpoints vs tasks share the `traces` array, split by `isTask`. `CollectionFrame` also carries `sessionRecordings` and `sessions`.
+- **Unknown fields are silently ignored**: a payload in the wrong shape (e.g. top-level `metrics`) still returns 200 but inserts nothing. When hand-crafting test payloads, confirm ingestion landed via `POST /api/metrics/query` (or the relevant list endpoint) instead of trusting the status code.
 
 ---
 
@@ -1408,10 +1441,10 @@ type PaginationParams struct {
 
 1. **Ensure SDK captures metric** (or add to `traceway.go` metrics collection)
 
-2. **Add repository query** in `backend/app/repositories/metrics.go`
+2. **Add repository query** to each telemetry backend's `metric_point.repository.go` under `backend/app/repositories/telemetry/{clickhouse,sqlite,duckdb}/`
    ```go
-   func (r *MetricRepository) GetNewMetric(projectID uuid.UUID, from, to time.Time) ([]MetricPoint, error) {
-       // Query metric_records table
+   func (r *metricPointRepository) GetNewMetric(ctx context.Context, projectId uuid.UUID, from, to time.Time) ([]models.TimeSeriesPoint, error) {
+       // Query metric_points with the backend's dialect
    }
    ```
 

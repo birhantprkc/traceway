@@ -70,9 +70,9 @@
     });
 </script>
 
-<div class="space-y-6">
+<div class="space-y-4">
     <div class="flex items-center justify-between gap-4">
-        <h1 class="text-2xl font-semibold tracking-tight">Settings</h1>
+        <h1 class="text-3xl font-semibold tracking-tight">Settings</h1>
         {#if manageableOrgs.length > 1}
             <div class="flex items-center gap-2">
                 <span class="text-sm text-muted-foreground">Organization</span>
@@ -103,7 +103,7 @@
             {error}
         </div>
     {:else}
-        <div class="space-y-6">
+        <div class="space-y-4">
             <OrganizationTab />
             <UsersTab organizationId={currentOrganizationId!} />
             {#if BillingTab}

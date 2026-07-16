@@ -1,10 +1,10 @@
 package middleware
 
 import (
+	"database/sql"
 	"github.com/tracewayapp/traceway/backend/app/cache"
 	"github.com/tracewayapp/traceway/backend/app/db"
-	"github.com/tracewayapp/traceway/backend/app/repositories"
-	"database/sql"
+	"github.com/tracewayapp/traceway/backend/app/repositories/transactional"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -43,7 +43,7 @@ func InitRequireWriteAccess() {
 		}
 
 		role, err := db.ExecuteTransaction(func(tx *sql.Tx) (string, error) {
-			return repositories.ProjectRepository.GetEffectiveRole(tx, projectId, userId)
+			return transactional.ProjectRepository.GetEffectiveRole(tx, projectId, userId)
 		})
 
 		if err != nil {

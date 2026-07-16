@@ -15,8 +15,23 @@ var DB *sql.DB          // PostgreSQL-replacement: relational/config data (trans
 var TelemetryDB *sql.DB // ClickHouse-replacement: append-only telemetry data (non-transactional)
 var Driver lit.Driver = lit.PostgreSQL
 
+var telemetryIsDuckDB bool
+
 func IsSQLite() bool {
 	return Driver == lit.SQLite
+}
+
+// Init opens the main (transactional) database selected by the transactional_* build axis, then
+// the telemetry database selected by the telemetry_* build axis.
+func Init() error {
+	if err := initMainDB(); err != nil {
+		return err
+	}
+	return initTelemetryDB()
+}
+
+func IsDuckDBTelemetry() bool {
+	return telemetryIsDuckDB
 }
 
 func initPostgres() error {
@@ -64,6 +79,7 @@ func GetDB() *sql.DB {
 }
 
 const TransactionContextKey = "dbTx"
+
 func GetTx(ctx context.Context) *sql.Tx {
 	if tx, ok := ctx.Value(TransactionContextKey).(*sql.Tx); ok {
 		return tx
