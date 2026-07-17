@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"database/sql"
-	"github.com/tracewayapp/traceway/backend/app/cache"
 	"github.com/tracewayapp/traceway/backend/app/db"
 	"github.com/tracewayapp/traceway/backend/app/repositories/transactional"
 	"net/http"
@@ -31,23 +30,12 @@ func InitRequireWriteAccess() {
 			return
 		}
 
-		project := cache.ProjectCache.GetById(projectId)
-		if project == nil {
-			c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "Project not found"})
-			return
-		}
-
-		if project.OrganizationId == nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, traceway.NewStackTraceErrorf("Project has no organization: %d %s", project.Id, project.Name))
-			return
-		}
-
 		role, err := db.ExecuteTransaction(func(tx *sql.Tx) (string, error) {
 			return transactional.ProjectRepository.GetEffectiveRole(tx, projectId, userId)
 		})
 
 		if err != nil {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Access denied"})
+			c.AbortWithError(http.StatusInternalServerError, traceway.NewStackTraceErrorf("failed to resolve effective role: %w", err))
 			return
 		}
 

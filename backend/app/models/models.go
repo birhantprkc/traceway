@@ -18,7 +18,6 @@ func Init(driver lit.Driver) {
 	lit.RegisterModel[Organization](driver)
 	lit.RegisterModel[OrganizationUser](driver)
 	lit.RegisterModel[OrganizationMember](driver)
-	lit.RegisterModel[ProjectUserRole](driver)
 	lit.RegisterModel[MemberProjectRole](driver)
 	lit.RegisterModel[Invitation](driver)
 	lit.RegisterModel[InvitationWithInviter](driver)

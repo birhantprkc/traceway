@@ -95,9 +95,11 @@ export interface ProjectWithToken extends Project {
     token: string;
 }
 
+const PROJECTS_CACHE_KEY = 'PROJECTS_CACHE_V2';
+
 class ProjectsState {
     projects = $state<Project[]>(
-        JSON.parse(localStorage.getItem('PROJECTS_CACHE') || '[]')
+        JSON.parse(localStorage.getItem(PROJECTS_CACHE_KEY) || '[]')
     );
     currentProjectId = $state<string | null>(localStorage.getItem('CURRENT_PROJECT_ID'));
     loading = $state(false);
@@ -138,7 +140,7 @@ class ProjectsState {
         }
 
         // Cache in localStorage
-        localStorage.setItem('PROJECTS_CACHE', JSON.stringify(this.projects));
+        localStorage.setItem(PROJECTS_CACHE_KEY, JSON.stringify(this.projects));
     }
 
     async loadProjects() {
@@ -153,7 +155,7 @@ class ProjectsState {
             this.error = errorMessage;
 
             // Try to load from cache
-            const cached = localStorage.getItem('PROJECTS_CACHE');
+            const cached = localStorage.getItem(PROJECTS_CACHE_KEY);
             if (cached) {
                 this.projects = JSON.parse(cached);
             }
@@ -199,7 +201,7 @@ class ProjectsState {
     }
 
     initFromCache() {
-        const cached = localStorage.getItem('PROJECTS_CACHE');
+        const cached = localStorage.getItem(PROJECTS_CACHE_KEY);
         if (cached) {
             this.projects = JSON.parse(cached);
         }

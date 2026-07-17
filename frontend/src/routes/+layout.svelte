@@ -117,8 +117,8 @@
 	}
 
 	function handleAddProjectClick() {
-		const writableOrgs = authState.organizations.filter((o) => o.role !== 'readonly');
-		if (writableOrgs.length === 0) {
+		const orgs = authState.organizations;
+		if (orgs.length > 0 && orgs.every((o) => o.role === 'readonly')) {
 			toast.error("You're not authorized to perform that action", { position: 'top-center' });
 			return;
 		}

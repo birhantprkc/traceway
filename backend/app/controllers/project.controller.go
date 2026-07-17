@@ -153,6 +153,7 @@ func (p projectController) CreateProject(c *gin.Context) {
 
 	userId := middleware.GetUserId(c)
 
+	var creatorRole string
 	project, err := db.ExecuteTransaction(func(tx *sql.Tx) (*models.Project, error) {
 		currentProject, err := transactional.ProjectRepository.FindById(tx, projectId)
 		if err != nil {
@@ -174,6 +175,7 @@ func (p projectController) CreateProject(c *gin.Context) {
 		if role == "" || role == "readonly" {
 			return nil, errNoOrgCreateAccess
 		}
+		creatorRole = role
 
 		if ProjectLimitHook != nil {
 			if err := ProjectLimitHook(tx, targetOrgId); err != nil {
@@ -198,7 +200,9 @@ func (p projectController) CreateProject(c *gin.Context) {
 
 	cache.ProjectCache.AddProject(project)
 
-	c.JSON(http.StatusCreated, project.ToProjectWithBackendUrl())
+	projectWithUrl := project.ToProjectWithBackendUrl()
+	projectWithUrl.Role = creatorRole
+	c.JSON(http.StatusCreated, projectWithUrl)
 }
 
 func (p projectController) UpdateProject(c *gin.Context) {

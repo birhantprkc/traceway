@@ -56,16 +56,18 @@
         }
     });
 
+    let loadSeq = 0;
+
     $effect(() => {
         if (currentOrganizationId && hasAccess) {
+            const seq = ++loadSeq;
             loading = true;
-            organizationState.loadSettings(currentOrganizationId)
-                .catch(e => {
-                    error = e instanceof Error ? e.message : 'Failed to load settings';
-                })
-                .finally(() => {
-                    loading = false;
-                });
+            error = null;
+            organizationState.loadSettings(currentOrganizationId).then(() => {
+                if (seq !== loadSeq) return;
+                error = organizationState.error;
+                loading = false;
+            });
         }
     });
 </script>

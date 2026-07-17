@@ -25,7 +25,7 @@
     let invitationToRevoke = $state<Invitation | null>(null);
     let processingRoleChange = $state<number | null>(null);
     let expandedMemberId = $state<number | null>(null);
-    let memberProjectRoles = $state<Record<number, MemberProjectRole[]>>({});
+    let expandedProjectRoles = $state<MemberProjectRole[]>([]);
     let loadingProjectRoles = $state(false);
     let processingProjectRole = $state<string | null>(null);
 
@@ -93,17 +93,18 @@
             return;
         }
         expandedMemberId = member.id;
-        if (!memberProjectRoles[member.id]) {
-            loadingProjectRoles = true;
-            try {
-                const response = await organizationState.getMemberProjectRoles(organizationId, member.id);
-                memberProjectRoles[member.id] = response.projectRoles;
-            } catch (e) {
-                toast.error(e instanceof Error ? e.message : 'Failed to load project roles', { position: 'top-center' });
-                expandedMemberId = null;
-            } finally {
-                loadingProjectRoles = false;
-            }
+        loadingProjectRoles = true;
+        expandedProjectRoles = [];
+        try {
+            const response = await organizationState.getMemberProjectRoles(organizationId, member.id);
+            if (expandedMemberId !== member.id) return;
+            expandedProjectRoles = response.projectRoles;
+            loadingProjectRoles = false;
+        } catch (e) {
+            if (expandedMemberId !== member.id) return;
+            loadingProjectRoles = false;
+            toast.error(e instanceof Error ? e.message : 'Failed to load project roles', { position: 'top-center' });
+            expandedMemberId = null;
         }
     }
 
@@ -244,7 +245,7 @@
                                         </div>
                                     {:else}
                                         <div class="space-y-1 pl-10 pr-2">
-                                            {#each memberProjectRoles[member.id] ?? [] as projectRole (projectRole.projectId)}
+                                            {#each expandedProjectRoles as projectRole (projectRole.projectId)}
                                                 <div class="flex items-center justify-between gap-4 py-1">
                                                     <div class="flex items-center gap-2">
                                                         <FrameworkIcon framework={projectRole.framework as Framework} class="size-4" />

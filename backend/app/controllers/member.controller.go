@@ -186,14 +186,13 @@ func (c *memberController) UpdateProjectRole(ctx *gin.Context) {
 		ctx.JSON(http.StatusNotFound, gin.H{"error": "User is not a member of this organization"})
 		return
 	}
-	if targetRole == "owner" || targetRole == "admin" {
-		ctx.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Owners and admins always have full access to every project"})
-		return
-	}
-
 	if request.Role == "default" {
 		err = transactional.ProjectUserRoleRepository.Delete(tx, projectId, targetUserId)
 	} else {
+		if targetRole == "owner" || targetRole == "admin" {
+			ctx.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Owners and admins always have full access to every project"})
+			return
+		}
 		err = transactional.ProjectUserRoleRepository.Upsert(tx, projectId, targetUserId, request.Role)
 	}
 	if err != nil {
