@@ -7,4 +7,5 @@
 [].name: string
 [].organizationId: number
 [].profileLabelAllowlist[]: empty
+[].role: string
 [].token: string

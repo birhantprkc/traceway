@@ -16,6 +16,7 @@ var (
 	OrganizationRepository        = pgrepo.OrganizationRepository
 	PersonalAccessTokenRepository = pgrepo.PersonalAccessTokenRepository
 	ProjectRepository             = pgrepo.ProjectRepository
+	ProjectUserRoleRepository     = pgrepo.ProjectUserRoleRepository
 	RefreshTokenRepository        = pgrepo.RefreshTokenRepository
 	UserRepository                = pgrepo.UserRepository
 	WidgetGroupRepository         = pgrepo.WidgetGroupRepository

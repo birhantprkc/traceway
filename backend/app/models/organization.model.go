@@ -40,3 +40,7 @@ type OrganizationSettingsResponse struct {
 type UpdateMemberRoleRequest struct {
 	Role string `json:"role" binding:"required,oneof=admin user readonly"`
 }
+
+type UpdateProjectRoleRequest struct {
+	Role string `json:"role" binding:"required,oneof=default user readonly"`
+}

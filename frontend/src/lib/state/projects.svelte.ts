@@ -81,15 +81,25 @@ export interface Project {
     dropHealthyHealthchecks: boolean;
     healthcheckPaths: string[] | null;
     profileLabelAllowlist: string[] | null;
+    role?: string;
+}
+
+export function isProjectReadonly(project: Project | null): boolean {
+    if (!project) return false;
+    if (project.role) return project.role === 'readonly';
+    if (!project.organizationId) return false;
+    return authState.getRoleForOrganization(project.organizationId) === 'readonly';
 }
 
 export interface ProjectWithToken extends Project {
     token: string;
 }
 
+const PROJECTS_CACHE_KEY = 'PROJECTS_CACHE_V2';
+
 class ProjectsState {
     projects = $state<Project[]>(
-        JSON.parse(localStorage.getItem('PROJECTS_CACHE') || '[]')
+        JSON.parse(localStorage.getItem(PROJECTS_CACHE_KEY) || '[]')
     );
     currentProjectId = $state<string | null>(localStorage.getItem('CURRENT_PROJECT_ID'));
     loading = $state(false);
@@ -105,11 +115,7 @@ class ProjectsState {
         return authState.canManageOrganization(organizationId);
     });
 
-    canWriteCurrentProject = $derived.by(() => {
-        const organizationId = this.currentProject?.organizationId;
-        if (!organizationId) return true;
-        return authState.getRoleForOrganization(organizationId) !== 'readonly';
-    });
+    canWriteCurrentProject = $derived(!isProjectReadonly(this.currentProject));
 
     constructor() {
         $effect.root(() => {
@@ -134,7 +140,7 @@ class ProjectsState {
         }
 
         // Cache in localStorage
-        localStorage.setItem('PROJECTS_CACHE', JSON.stringify(this.projects));
+        localStorage.setItem(PROJECTS_CACHE_KEY, JSON.stringify(this.projects));
     }
 
     async loadProjects() {
@@ -149,7 +155,7 @@ class ProjectsState {
             this.error = errorMessage;
 
             // Try to load from cache
-            const cached = localStorage.getItem('PROJECTS_CACHE');
+            const cached = localStorage.getItem(PROJECTS_CACHE_KEY);
             if (cached) {
                 this.projects = JSON.parse(cached);
             }
@@ -158,8 +164,8 @@ class ProjectsState {
         }
     }
 
-    async createProject(name: string, framework: Framework = 'gin'): Promise<ProjectWithToken> {
-        const response = await api.post('/projects', { name, framework }, {
+    async createProject(name: string, framework: Framework = 'gin', organizationId?: number): Promise<ProjectWithToken> {
+        const response = await api.post('/projects', { name, framework, organizationId }, {
             projectId: this.currentProjectId ?? undefined
         });
 
@@ -195,7 +201,7 @@ class ProjectsState {
     }
 
     initFromCache() {
-        const cached = localStorage.getItem('PROJECTS_CACHE');
+        const cached = localStorage.getItem(PROJECTS_CACHE_KEY);
         if (cached) {
             this.projects = JSON.parse(cached);
         }

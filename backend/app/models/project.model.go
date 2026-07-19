@@ -70,4 +70,5 @@ func getBackendUrl() string {
 type ProjectWithBackendUrl struct {
 	Project
 	BackendUrl string `json:"backendUrl"`
+	Role       string `json:"role"`
 }

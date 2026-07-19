@@ -3,6 +3,7 @@
     import { authState } from '$lib/state/auth.svelte';
     import { projectsState } from '$lib/state/projects.svelte';
     import { organizationState } from '$lib/state/organization.svelte';
+    import * as Select from '$lib/components/ui/select';
     import OrganizationTab from './organization-tab.svelte';
     import UsersTab from './users-tab.svelte';
     import type { Component } from 'svelte';
@@ -26,37 +27,73 @@
         loadBillingModule();
     });
 
-    const currentOrganizationId = $derived(projectsState.currentProject?.organizationId);
-
-    const hasAccess = $derived(
-        currentOrganizationId !== null &&
-        currentOrganizationId !== undefined &&
-        authState.canManageOrganization(currentOrganizationId)
+    const manageableOrgs = $derived(
+        authState.organizations.filter(o => o.role === 'owner' || o.role === 'admin')
     );
 
+    let selectedOrgId = $state<number | null>(null);
+
+    const currentOrganizationId = $derived.by(() => {
+        if (selectedOrgId !== null && manageableOrgs.some(o => o.id === selectedOrgId)) {
+            return selectedOrgId;
+        }
+        const projectOrgId = projectsState.currentProject?.organizationId;
+        if (projectOrgId && manageableOrgs.some(o => o.id === projectOrgId)) {
+            return projectOrgId;
+        }
+        return manageableOrgs[0]?.id ?? null;
+    });
+
+    const currentOrganizationName = $derived(
+        manageableOrgs.find(o => o.id === currentOrganizationId)?.name ?? ''
+    );
+
+    const hasAccess = $derived(currentOrganizationId !== null);
+
     $effect(() => {
-        if (!hasAccess && !loading) {
+        if (!hasAccess) {
             goto('/');
         }
     });
 
+    let loadSeq = 0;
+
     $effect(() => {
         if (currentOrganizationId && hasAccess) {
+            const seq = ++loadSeq;
             loading = true;
-            organizationState.loadSettings(currentOrganizationId)
-                .catch(e => {
-                    error = e instanceof Error ? e.message : 'Failed to load settings';
-                })
-                .finally(() => {
-                    loading = false;
-                });
+            error = null;
+            organizationState.loadSettings(currentOrganizationId).then(() => {
+                if (seq !== loadSeq) return;
+                error = organizationState.error;
+                loading = false;
+            });
         }
     });
 </script>
 
 <div class="space-y-4">
-    <div>
+    <div class="flex items-center justify-between gap-4">
         <h1 class="text-3xl font-semibold tracking-tight">Settings</h1>
+        {#if manageableOrgs.length > 1}
+            <div class="flex items-center gap-2">
+                <span class="text-sm text-muted-foreground">Organization</span>
+                <Select.Root
+                    type="single"
+                    value={currentOrganizationId !== null ? String(currentOrganizationId) : undefined}
+                    onValueChange={(val) => { if (val) selectedOrgId = Number(val); }}
+                >
+                    <Select.Trigger class="w-[220px]">
+                        {currentOrganizationName || 'Select organization'}
+                    </Select.Trigger>
+                    <Select.Content>
+                        {#each manageableOrgs as org (org.id)}
+                            <Select.Item value={String(org.id)}>{org.name}</Select.Item>
+                        {/each}
+                    </Select.Content>
+                </Select.Root>
+            </div>
+        {/if}
     </div>
 
     {#if loading}

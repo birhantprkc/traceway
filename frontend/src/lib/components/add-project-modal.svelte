@@ -1,10 +1,13 @@
 <script lang="ts">
+    import { untrack } from 'svelte';
     import * as Sheet from "$lib/components/ui/sheet";
     import { Button } from "$lib/components/ui/button";
     import { Input } from "$lib/components/ui/input";
     import { Label } from "$lib/components/ui/label";
+    import * as Select from "$lib/components/ui/select";
     import { ErrorAlert } from "$lib/components/ui/error-alert";
     import { projectsState, getFrameworkLabel, type ProjectWithToken, type Framework } from '$lib/state/projects.svelte';
+    import { authState } from '$lib/state/auth.svelte';
     import { Copy, Check, ExternalLink, Plus } from 'lucide-svelte';
     import FrameworkIcon from './framework-icon.svelte';
     import FrameworkCombobox from './framework-combobox.svelte';
@@ -23,6 +26,21 @@
     let error = $state('');
     let createdProject = $state<ProjectWithToken | null>(null);
     let copied = $state(false);
+    let selectedOrgId = $state<number | null>(null);
+
+    const writableOrgs = $derived(authState.organizations.filter(o => o.role !== 'readonly'));
+    const selectedOrgName = $derived(writableOrgs.find(o => o.id === selectedOrgId)?.name ?? '');
+
+    $effect(() => {
+        if (open) {
+            untrack(() => {
+                const currentOrgId = projectsState.currentProject?.organizationId;
+                selectedOrgId = writableOrgs.some(o => o.id === currentOrgId)
+                    ? currentOrgId!
+                    : (writableOrgs[0]?.id ?? null);
+            });
+        }
+    });
 
     async function handleSubmit(e: Event) {
         e.preventDefault();
@@ -31,7 +49,7 @@
         error = '';
 
         try {
-            const project = await projectsState.createProject(projectName.trim(), selectedFramework);
+            const project = await projectsState.createProject(projectName.trim(), selectedFramework, selectedOrgId ?? undefined);
             createdProject = project;
         } catch (err) {
             error = err instanceof Error ? err.message : 'Failed to create project';
@@ -53,6 +71,7 @@
         selectedFramework = 'gin';
         error = '';
         createdProject = null;
+        selectedOrgId = null;
         onOpenChange(false);
     }
 
@@ -89,6 +108,11 @@
                 <div class="space-y-2">
                     <Label>Project Name</Label>
                     <div class="text-lg font-medium">{createdProject.name}</div>
+                </div>
+
+                <div class="space-y-2">
+                    <Label>Organization</Label>
+                    <div class="text-sm text-muted-foreground">{selectedOrgName}</div>
                 </div>
 
                 <div class="space-y-2">
@@ -134,6 +158,28 @@
         {:else}
             <form onsubmit={handleSubmit} class="px-6 py-6 space-y-5">
                 <ErrorAlert {error} />
+
+                <div class="space-y-2">
+                    <Label>Organization</Label>
+                    {#if writableOrgs.length > 1}
+                        <Select.Root
+                            type="single"
+                            value={selectedOrgId !== null ? String(selectedOrgId) : undefined}
+                            onValueChange={(val) => { if (val) selectedOrgId = Number(val); }}
+                        >
+                            <Select.Trigger class="w-full" disabled={loading}>
+                                {selectedOrgName || 'Select organization'}
+                            </Select.Trigger>
+                            <Select.Content>
+                                {#each writableOrgs as org (org.id)}
+                                    <Select.Item value={String(org.id)}>{org.name}</Select.Item>
+                                {/each}
+                            </Select.Content>
+                        </Select.Root>
+                    {:else}
+                        <div class="text-sm font-medium">{selectedOrgName}</div>
+                    {/if}
+                </div>
 
                 <div class="space-y-2">
                     <Label for="project-name">Project Name</Label>

@@ -29,20 +29,38 @@ type projectWithRole struct {
 	HealthcheckPaths        models.StringSlice `lit:"healthcheck_paths"`
 	ProfileLabelAllowlist   models.StringSlice `lit:"profile_label_allowlist"`
 	Role                    string             `lit:"role"`
+	OverrideRole            *string            `lit:"override_role"`
+}
+
+type effectiveRoleRow struct {
+	OrgRole      string  `lit:"org_role"`
+	OverrideRole *string `lit:"override_role"`
 }
 
 func init() {
 	models.ExtensionModelRegistrations = append(models.ExtensionModelRegistrations, func(driver lit.Driver) {
 		lit.RegisterModel[projectWithRole](driver)
+		lit.RegisterModel[effectiveRoleRow](driver)
 	})
+}
+
+func effectiveRole(orgRole string, overrideRole *string) string {
+	if orgRole == "owner" || orgRole == "admin" {
+		return orgRole
+	}
+	if overrideRole != nil {
+		return *overrideRole
+	}
+	return orgRole
 }
 
 func (p *projectRepository) FindAllWithBackendUrlByUserId(tx *sql.Tx, userId int) ([]*models.ProjectWithBackendUrl, error) {
 	rows, err := lit.SelectNamed[projectWithRole](
 		tx,
-		`SELECT DISTINCT p.id, p.name, p.token, p.framework, p.organization_id, p.created_at, p.source_map_token, p.drop_healthy_healthchecks, p.healthcheck_paths, p.profile_label_allowlist, ou.role
+		`SELECT DISTINCT p.id, p.name, p.token, p.framework, p.organization_id, p.created_at, p.source_map_token, p.drop_healthy_healthchecks, p.healthcheck_paths, p.profile_label_allowlist, ou.role, pur.role as override_role
 		FROM projects p
 		INNER JOIN organization_users ou ON p.organization_id = ou.organization_id
+		LEFT JOIN project_user_roles pur ON pur.project_id = p.id AND pur.user_id = :user_id
 		WHERE ou.user_id = :user_id
 		ORDER BY p.created_at ASC`,
 		lit.P{"user_id": userId},
@@ -53,9 +71,10 @@ func (p *projectRepository) FindAllWithBackendUrlByUserId(tx *sql.Tx, userId int
 
 	result := make([]*models.ProjectWithBackendUrl, 0, len(rows))
 	for _, row := range rows {
+		role := effectiveRole(row.Role, row.OverrideRole)
 		token := row.Token
 		sourceMapToken := row.SourceMapToken
-		if row.Role == "readonly" {
+		if role == "readonly" {
 			token = "read-only-hidden-token"
 			sourceMapToken = nil
 		}
@@ -72,10 +91,31 @@ func (p *projectRepository) FindAllWithBackendUrlByUserId(tx *sql.Tx, userId int
 			HealthcheckPaths:        row.HealthcheckPaths,
 			ProfileLabelAllowlist:   row.ProfileLabelAllowlist,
 		}
-		result = append(result, project.ToProjectWithBackendUrl())
+		projectWithUrl := project.ToProjectWithBackendUrl()
+		projectWithUrl.Role = role
+		result = append(result, projectWithUrl)
 	}
 
 	return result, nil
+}
+
+func (p *projectRepository) GetEffectiveRole(tx *sql.Tx, projectId uuid.UUID, userId int) (string, error) {
+	row, err := lit.SelectSingleNamed[effectiveRoleRow](
+		tx,
+		`SELECT ou.role as org_role, pur.role as override_role
+		FROM projects p
+		INNER JOIN organization_users ou ON ou.organization_id = p.organization_id AND ou.user_id = :user_id
+		LEFT JOIN project_user_roles pur ON pur.project_id = p.id AND pur.user_id = :user_id
+		WHERE p.id = :project_id`,
+		lit.P{"user_id": userId, "project_id": projectId},
+	)
+	if err != nil {
+		return "", err
+	}
+	if row == nil {
+		return "", nil
+	}
+	return effectiveRole(row.OrgRole, row.OverrideRole), nil
 }
 
 func (p *projectRepository) FindAll(tx *sql.Tx) ([]*models.Project, error) {
@@ -234,6 +274,7 @@ func (p *projectRepository) Delete(tx *sql.Tx, id uuid.UUID) error {
 		"widget_groups",
 		"source_maps",
 		"metric_registry",
+		"project_user_roles",
 	}
 	for _, table := range related {
 		if err := lit.DeleteNamed(db.Driver, tx, "DELETE FROM "+table+" WHERE project_id = :project_id", lit.P{"project_id": id}); err != nil {

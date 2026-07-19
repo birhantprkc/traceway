@@ -16,6 +16,7 @@ var (
 	OrganizationRepository        = sqliterepo.OrganizationRepository
 	PersonalAccessTokenRepository = sqliterepo.PersonalAccessTokenRepository
 	ProjectRepository             = sqliterepo.ProjectRepository
+	ProjectUserRoleRepository     = sqliterepo.ProjectUserRoleRepository
 	RefreshTokenRepository        = sqliterepo.RefreshTokenRepository
 	UserRepository                = sqliterepo.UserRepository
 	WidgetGroupRepository         = sqliterepo.WidgetGroupRepository

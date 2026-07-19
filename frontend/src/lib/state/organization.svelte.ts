@@ -35,6 +35,18 @@ export interface OrganizationSettings {
     userRole: string;
 }
 
+export interface MemberProjectRole {
+    projectId: string;
+    name: string;
+    framework: string;
+    role: string | null;
+}
+
+export interface MemberProjectRolesResponse {
+    orgRole: string;
+    projectRoles: MemberProjectRole[];
+}
+
 class OrganizationState {
     currentOrganization = $state<Organization | null>(null);
     members = $state<OrganizationMember[]>([]);
@@ -49,21 +61,27 @@ class OrganizationState {
     memberCount = $derived(this.members.length + this.invitations.filter(i => i.status === 'pending').length);
     canInvite = $derived(this.memberCount < 10);
 
+    private loadSeq = 0;
+
     async loadSettings(organizationId: number) {
+        const seq = ++this.loadSeq;
         this.loading = true;
         this.error = null;
 
         try {
             const response: OrganizationSettings = await api.get(`/organizations/${organizationId}/settings`);
+            if (seq !== this.loadSeq) return;
             this.currentOrganization = response.organization;
             this.members = response.members;
             this.invitations = response.invitations;
             this.userRole = response.userRole;
         } catch (e: unknown) {
-            const errorMessage = e instanceof Error ? e.message : 'Failed to load settings';
-            this.error = errorMessage;
+            if (seq !== this.loadSeq) return;
+            this.error = e instanceof Error ? e.message : 'Failed to load settings';
         } finally {
-            this.loading = false;
+            if (seq === this.loadSeq) {
+                this.loading = false;
+            }
         }
     }
 
@@ -86,6 +104,14 @@ class OrganizationState {
     async removeMember(organizationId: number, userId: number) {
         await api.delete(`/organizations/${organizationId}/members/${userId}`);
         await this.loadSettings(organizationId);
+    }
+
+    async getMemberProjectRoles(organizationId: number, userId: number): Promise<MemberProjectRolesResponse> {
+        return await api.get(`/organizations/${organizationId}/members/${userId}/project-roles`) as MemberProjectRolesResponse;
+    }
+
+    async updateMemberProjectRole(organizationId: number, userId: number, projectId: string, role: string) {
+        await api.put(`/organizations/${organizationId}/members/${userId}/project-roles/${projectId}`, { role });
     }
 
     async updateTimezone(organizationId: number, timezone: string) {

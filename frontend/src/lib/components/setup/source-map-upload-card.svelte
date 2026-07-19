@@ -7,8 +7,7 @@
 		CardTitle
 	} from '$lib/components/ui/card';
 	import { KeyRound } from 'lucide-svelte';
-	import { projectsState } from '$lib/state/projects.svelte';
-	import { authState } from '$lib/state/auth.svelte';
+	import { projectsState, isProjectReadonly } from '$lib/state/projects.svelte';
 	import SourceMapSetup from '$lib/components/source-map-setup.svelte';
 
 	let projectWithToken = $derived(projectsState.currentProject);
@@ -16,10 +15,7 @@
 	const isFlutter = $derived(projectWithToken?.framework === 'flutter');
 	const isIOS = $derived(projectWithToken?.framework === 'ios');
 
-	const isReadonly = $derived(
-		authState.getRoleForOrganization(projectsState.currentProject?.organizationId ?? 0) ===
-			'readonly'
-	);
+	const isReadonly = $derived(isProjectReadonly(projectsState.currentProject));
 </script>
 
 {#if projectWithToken && !isReadonly}
