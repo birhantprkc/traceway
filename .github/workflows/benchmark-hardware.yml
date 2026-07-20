@@ -54,6 +54,10 @@ on:
         description: 'Read-probe fill ladder override, comma-separated row counts (default 100000,1000000,10000000,100000000). e.g. 10000000,100000000,1000000000 to probe 1B — raise duration to cover the fill, it is a hard cap on the whole run. Ignored unless scenario=read-probe.'
         required: false
         default: ''
+      read_threshold_ms:
+        description: 'Read-probe pass threshold override in ms (default 5000; probe timeout is threshold + 1s). Raise for diagnostic dispatches (e.g. 60000) to measure how long slow queries actually take instead of truncating at 6s. Leave empty for headline runs so the series stays comparable. Ignored unless scenario=read-probe.'
+        required: false
+        default: ''
       commit_results:
         description: 'Commit results to the dispatched ref (REPLACES the whole scenario results folder with only this dispatch''s entries). Set false for exploratory or partial-matrix runs — per-entry result JSONs are still available as the matrix jobs'' workflow artifacts.'
         required: true
@@ -113,6 +117,7 @@ jobs:
       BENCH_FILL_BATCH_SIZE: ${{ github.event.inputs.fill_batch_size }}
       BENCH_FILL_REQUEST_RATE: ${{ github.event.inputs.fill_request_rate }}
       BENCH_FILL_LEVELS: ${{ github.event.inputs.fill_levels }}
+      BENCH_READ_THRESHOLD_MS: ${{ github.event.inputs.read_threshold_ms }}
       # Managed-ClickHouse credentials. Used only when modes contains
       # managed-ch; empty for sqlite/pgch entries (harmless — sut-bootstrap
       # only validates them when MODE=managed-ch).

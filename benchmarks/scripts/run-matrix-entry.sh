@@ -107,6 +107,13 @@ if [[ "${SCENARIO}" == "read-probe" ]]; then
     if [[ -n "${BENCH_FILL_LEVELS:-}" ]]; then
         extra_args+=( --fill-levels "${BENCH_FILL_LEVELS}" )
     fi
+    # Diagnostic threshold override (e.g. 60000). The probe timeout is
+    # threshold + 1s, so raising this reveals how long a slow query actually
+    # takes instead of truncating it at the default 6s. Headline runs keep
+    # the 5000 default so results stay comparable across the series.
+    if [[ -n "${BENCH_READ_THRESHOLD_MS:-}" ]]; then
+        extra_args+=( --read-threshold-ms "${BENCH_READ_THRESHOLD_MS}" )
+    fi
 fi
 
 # SQLite and DuckDB have no merge-idle equivalent — /health/deep returns
