@@ -1,0 +1,161 @@
+{
+  "tier": "ccx13",
+  "mode": "duckdb",
+  "signal": "metrics",
+  "scenario": "read-probe",
+  "startedAt": "2026-07-20T12:43:35Z",
+  "endedAt": "2026-07-20T13:32:30Z",
+  "readProbe": {
+    "endpoints": [
+      {
+        "name": "metrics-server",
+        "path": "/api/metrics/server"
+      },
+      {
+        "name": "metrics-application",
+        "path": "/api/metrics/application"
+      },
+      {
+        "name": "dashboard",
+        "path": "/api/dashboard"
+      }
+    ],
+    "readPath": "/api/metrics/server",
+    "readThresholdMs": 5000,
+    "settleSeconds": 10,
+    "fillBatchSize": 8192,
+    "fillRequestRate": 100,
+    "steps": [
+      {
+        "fillLevelTarget": 1000000,
+        "rowsIngested": 1155072,
+        "ingestSecondsElapsed": 3.266561102,
+        "probes": [
+          {
+            "name": "metrics-server",
+            "path": "/api/metrics/server",
+            "latencyMs": 78.3667,
+            "ok": true
+          },
+          {
+            "name": "metrics-application",
+            "path": "/api/metrics/application",
+            "latencyMs": 98.676076,
+            "ok": true
+          },
+          {
+            "name": "dashboard",
+            "path": "/api/dashboard",
+            "latencyMs": 147.198833,
+            "ok": true
+          }
+        ],
+        "medianLatencyMs": 98.676076,
+        "readLatencyMs": 98.676076,
+        "readOk": true,
+        "passed": true
+      },
+      {
+        "fillLevelTarget": 10000000,
+        "rowsIngested": 10289152,
+        "ingestSecondsElapsed": 29.544118968,
+        "probes": [
+          {
+            "name": "metrics-server",
+            "path": "/api/metrics/server",
+            "latencyMs": 257.961618,
+            "ok": true
+          },
+          {
+            "name": "metrics-application",
+            "path": "/api/metrics/application",
+            "latencyMs": 297.02590000000004,
+            "ok": true
+          },
+          {
+            "name": "dashboard",
+            "path": "/api/dashboard",
+            "latencyMs": 487.871677,
+            "ok": true
+          }
+        ],
+        "medianLatencyMs": 297.02590000000004,
+        "readLatencyMs": 297.02590000000004,
+        "readOk": true,
+        "passed": true
+      },
+      {
+        "fillLevelTarget": 100000000,
+        "rowsIngested": 100057088,
+        "ingestSecondsElapsed": 266.359219308,
+        "probes": [
+          {
+            "name": "metrics-server",
+            "path": "/api/metrics/server",
+            "latencyMs": 2223.881928,
+            "ok": true
+          },
+          {
+            "name": "metrics-application",
+            "path": "/api/metrics/application",
+            "latencyMs": 2710.946288,
+            "ok": true
+          },
+          {
+            "name": "dashboard",
+            "path": "/api/dashboard",
+            "latencyMs": 4254.424445,
+            "ok": true
+          }
+        ],
+        "medianLatencyMs": 2710.946288,
+        "readLatencyMs": 2710.946288,
+        "readOk": true,
+        "passed": true
+      },
+      {
+        "fillLevelTarget": 1000000000,
+        "rowsIngested": 1000087552,
+        "ingestSecondsElapsed": 2585.606908558,
+        "probes": [
+          {
+            "name": "metrics-server",
+            "path": "/api/metrics/server",
+            "latencyMs": 0.674826,
+            "ok": false,
+            "error": "Get \"http://10.0.0.2/api/metrics/server?fromDate=2026-07-19T13%3A32%3A30Z&projectId=851c4c17-e3f2-4bdf-b4bb-888931dd9798&toDate=2026-07-20T13%3A32%3A30Z\": dial tcp 10.0.0.2:80: connect: connection refused"
+          },
+          {
+            "name": "metrics-application",
+            "path": "/api/metrics/application",
+            "latencyMs": 0.400743,
+            "ok": false,
+            "error": "Get \"http://10.0.0.2/api/metrics/application?fromDate=2026-07-19T13%3A32%3A30Z&projectId=851c4c17-e3f2-4bdf-b4bb-888931dd9798&toDate=2026-07-20T13%3A32%3A30Z\": dial tcp 10.0.0.2:80: connect: connection refused"
+          },
+          {
+            "name": "dashboard",
+            "path": "/api/dashboard",
+            "latencyMs": 0.36321200000000003,
+            "ok": false,
+            "error": "Get \"http://10.0.0.2/api/dashboard?fromDate=2026-07-19T13%3A32%3A30Z&projectId=851c4c17-e3f2-4bdf-b4bb-888931dd9798&toDate=2026-07-20T13%3A32%3A30Z\": dial tcp 10.0.0.2:80: connect: connection refused"
+          }
+        ],
+        "medianLatencyMs": 0.400743,
+        "readLatencyMs": 0.400743,
+        "readOk": false,
+        "passed": false,
+        "failReason": "probe metrics-server failed: Get \"http://10.0.0.2/api/metrics/server?fromDate=2026-07-19T13%3A32%3A30Z&projectId=851c4c17-e3f2-4bdf-b4bb-888931dd9798&toDate=2026-07-20T13%3A32%3A30Z\": dial tcp 10.0.0.2:80: connect: connection refused (latency 1ms)"
+      }
+    ],
+    "maxFillLevelPassed": 100000000
+  },
+  "maxFillLevelPassed": 100000000,
+  "bytesOnDisk": 10048208896,
+  "storedRows": 1000087552,
+  "sutContainer": {
+    "status": "exited",
+    "oomKilled": true,
+    "exitCode": 137,
+    "restartCount": 3
+  }
+}
