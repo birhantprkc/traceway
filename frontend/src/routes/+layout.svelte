@@ -8,6 +8,7 @@
 	import AppSidebar from '$lib/components/app-sidebar.svelte';
 	import AddProjectModal from '$lib/components/add-project-modal.svelte';
 	import EditProjectModal from '$lib/components/edit-project-modal.svelte';
+	import DashboardCommand from '$lib/components/dashboard/dashboard-command.svelte';
 	import FrameworkIcon from '$lib/components/framework-icon.svelte';
 	import * as Sidebar from '$lib/components/ui/sidebar';
 	import { Button } from '$lib/components/ui/button';
@@ -31,6 +32,19 @@
 	let { children } = $props();
 	let showAddProjectModal = $state(false);
 	let showEditProjectModal = $state(false);
+	let showCommandPalette = $state(false);
+
+	const isMacPlatform = typeof navigator !== 'undefined' && /Mac|iP(hone|ad|od)/.test(navigator.platform);
+
+	function handleGlobalKeydown(e: KeyboardEvent) {
+		if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+			if (!authState.isAuthenticated || isPublicPath(page.url.pathname)) return;
+			if (isMacPlatform && !e.metaKey) return;
+			if (page.url.pathname === '/dashboards') return;
+			e.preventDefault();
+			showCommandPalette = !showCommandPalette;
+		}
+	}
 
 	const SIDEBAR_OPEN_KEY = 'traceway_sidebar_open';
 	let sidebarOpen = $state(localStorage.getItem(SIDEBAR_OPEN_KEY) !== 'false');
@@ -154,6 +168,8 @@
 
 <svelte:head><title>Traceway</title></svelte:head>
 
+<svelte:window onkeydown={handleGlobalKeydown} />
+
 {#snippet projectItem(project: Project, indent: boolean)}
 	<DropdownMenu.Item
 		onclick={() => handleProjectSelect(project.id)}
@@ -269,6 +285,8 @@
 		onOpenChange={(open) => (showEditProjectModal = open)}
 		project={projectsState.currentProject}
 	/>
+
+	<DashboardCommand bind:open={showCommandPalette} />
 
 	<Toaster position="bottom-right" />
 {:else}
