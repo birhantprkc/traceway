@@ -55,7 +55,7 @@ One more disclosure, this one in the backend rather than the harness. My first D
 | Spans | 30,508/sec | **95,737/sec** | batch 16384 × 7.5 req/sec, p50 1.2 s | 8.75 req/sec, 9.7% errors |
 | Logs | 4,877/sec | **75,225/sec** | batch 16384 × 5 req/sec, p50 3.0 s | 5.625 req/sec, 11.4% errors |
 
-Going in, my quiet bar for this table was "double SQLite and I'll call it a win," and the one cell I braced for was logs. Post 2's starkest result was logs writing at 4,877/sec into a wall at 5 req/sec so sharp that 1.5x more requests took the error rate from 0% to 98%. That wall is the cell that moved most: the DuckDB build writes logs at fifteen times SQLite's rate, and the wall became a slope of polite refusals. The signal with the lowest SQLite ceiling and the highest real-world volume is exactly the one the columnar engine helps most, which is either obvious in hindsight or exactly backwards from what post 2 trained me to expect, and I genuinely held the second view until this table existed.
+Going in, my quiet bar for this table was "double SQLite and I'll call it a win," and the one cell I braced for was logs. Post 2's starkest result was logs writing at 4,877/sec into a wall at 5 req/sec so sharp that 1.5x more requests took the error rate from 0% to 98%. That wall is the cell that moved most: the DuckDB build writes logs at fifteen times SQLite's rate, and the wall became a slope of polite refusals. The signal with the lowest SQLite ceiling and the highest real-world volume is the one the columnar engine helps most, which is either obvious in hindsight or backwards from everything post 2 trained me to expect, and I held the second view until this table existed.
 
 The "first failing step" column matters as much as the headline column. Every failing step in it is clean 503 rejection from the admission gate, and the container finished all three runs with zero restarts. That is the same graceful-cliff behavior SQLite showed in post 2, and DuckDB only exhibits it because of the fix I disclosed above; before it, this table could not be produced at all.
 
@@ -72,17 +72,25 @@ Writes were the appetizer; reads are why anyone reaches for a columnar engine, a
 | ~100M | **3.0 s, passes** | over 60 s, fails | fails unevenly: body search 3.5 s, trace-id 2 ms, severity filter over 60 s |
 | ~1B | fill succeeds, queries over 60 s | not reached | not reached |
 
-Each cell is the median of three real endpoint probes after fill and digestion; bold marks each signal's last passing level. I got two extra decades per signal, not one: SQLite's last passing levels were 1M, 100k, and 100k, and every one of them moved by exactly a factor of one hundred. Same endpoints, same thresholds.
+Each cell is the median of three real endpoint probes after fill and digestion; bold marks each signal's last passing level. I got two extra decades per signal, not one: SQLite's last passing levels were 1M, 100k, and 100k, and all three moved by the same factor of one hundred. Same endpoints, same thresholds.
 
-Metrics reads scale almost politely: 146 ms at 1M, 382 ms at 10M, 3.0 s at 100M. A hundred times the rows costs twenty times the latency, the scan gets cheaper per row as the table grows. The level SQLite barely passed sits two decades below the level DuckDB passes with the same margin.
+Metrics reads scale gently: 146 ms at 1M, 382 ms at 10M, 3.0 s at 100M. A hundred times the rows costs twenty times the latency, the scan gets cheaper per row as the table grows. The level SQLite barely passed is a hundredth of the level DuckDB passes with the same margin.
 
 ![Per-endpoint read latency vs metric_points table size on log-log axes. All three probes sit under 250 ms at 1M rows, under 700 ms at 10M, and between 2.5 and 5 s at 100M, still under the threshold](/blog/sqlite-vs-duckdb/chart-readprobe-metrics.webp)
 
-Spans pay for their percentiles, same as they did on SQLite, just later. The two aggregation-heavy pages, P50/P95/P99 grouped by route and the stacked latency chart, cost 902 ms at 10M rows and blow past a full minute at 100M. Post 2 watched the same two pages die between 100k and 1M.
+Spans pay for their percentiles, same as they did on SQLite, just later. This is the page doing the paying, the endpoints table the probes load, here reading a table of the loadgen's spans on my local instance:
+
+![The Traceway endpoints page over loadgen spans: thirteen synthetic routes at around 219k calls each, P50 around 505 ms, slow bucket 950 ms, the shapes the loadgen emits, not Traceway's overhead](/blog/sqlite-vs-duckdb/img-endpoints-page.webp)
+
+Every row in that table is a P50/P95/P99 aggregation over the spans behind it, and the stacked latency chart above it is a second aggregation. Those two queries cost 902 ms at 10M rows and blow past a full minute at 100M. Post 2 watched the same two pages die between 100k and 1M.
 
 ![Per-endpoint read latency vs spans table size on log-log axes. The two percentile-aggregation probes track from under 200 ms at 1M to about 900 ms at 10M, then exceed the timeout at 100M](/blog/sqlite-vs-duckdb/chart-readprobe-spans.webp)
 
-Logs are the numbers I trusted least and checked hardest, an early bad run had me convinced for a full day that DuckDB couldn't read logs at all, and the truth turned out to be post 2's most interesting pattern repeated one decade up. At their passing levels they're the fastest dashboard of the three (85 ms median at 10M), and their failure at 100M is uneven in the same way SQLite's was at 1M: the trace-ID lookup still answers in 2 ms, the body search in 3.5 s, and only the severity filter, which matches and ranks a large slice of 100M rows, dies. The pages an on-call actually opens mid-incident, find this trace, search this error, remain usable at 100M rows; the full-table scan does not. Retention policy should still follow that split. The split just moved 100x.
+Logs are the numbers I trusted least and checked hardest, an early bad run had me convinced for a full day that DuckDB couldn't read logs at all. For orientation, this is the page in question, reading the loadgen's log records on my local instance:
+
+![The Traceway logs page over loadgen data: INFO, WARN, and ERROR records with realistic bodies like "slow query detected" and "payment authorized via stripe", a service column, and truncated trace IDs](/blog/sqlite-vs-duckdb/img-logs-page.webp)
+
+The truth turned out to be post 2's most interesting pattern repeated one decade up. At their passing levels they're the fastest dashboard of the three (85 ms median at 10M), and their failure at 100M is uneven in the same way SQLite's was at 1M: the trace-ID lookup still answers in 2 ms, the body search in 3.5 s, and only the severity filter, which matches and ranks a large slice of 100M rows, dies. The pages an on-call actually opens mid-incident, find this trace, search this error, remain usable at 100M rows; the full-table scan does not. Retention policy should still follow that split. The split just moved 100x.
 
 ![Per-endpoint read latency vs log_records table size on log-log axes. The trace-id lookup stays at 2 ms across every level, the body search holds under 100 ms to 10M and reaches 3.5 s at 100M, and the severity filter crosses the threshold at 100M](/blog/sqlite-vs-duckdb/chart-readprobe-logs.webp)
 
