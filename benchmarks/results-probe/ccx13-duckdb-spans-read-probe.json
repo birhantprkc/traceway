@@ -3,8 +3,8 @@
   "mode": "duckdb",
   "signal": "spans",
   "scenario": "read-probe",
-  "startedAt": "2026-07-20T12:31:52Z",
-  "endedAt": "2026-07-20T12:37:17Z",
+  "startedAt": "2026-07-21T08:48:02Z",
+  "endedAt": "2026-07-21T09:00:18Z",
   "readProbe": {
     "endpoints": [
       {
@@ -28,105 +28,72 @@
     "steps": [
       {
         "fillLevelTarget": 1000000,
-        "rowsIngested": 1818624,
-        "ingestSecondsElapsed": 30.656478277,
+        "rowsIngested": 1982464,
+        "ingestSecondsElapsed": 17.818738977,
+        "digestSeconds": 5.003859531,
         "probes": [
           {
             "name": "endpoints-grouped",
             "path": "/api/endpoints/grouped",
-            "latencyMs": 354.24581900000004,
+            "latencyMs": 260.901057,
             "ok": true
           },
           {
             "name": "endpoints-chart",
             "path": "/api/endpoints/chart",
-            "latencyMs": 325.926413,
+            "latencyMs": 206.440555,
             "ok": true
           },
           {
             "name": "exception-stack-traces",
             "path": "/api/exception-stack-traces",
-            "latencyMs": 6.095135,
+            "latencyMs": 3.680037,
             "ok": true
           }
         ],
-        "medianLatencyMs": 325.926413,
-        "readLatencyMs": 325.926413,
+        "medianLatencyMs": 206.440555,
+        "readLatencyMs": 206.440555,
         "readOk": true,
         "passed": true
       },
       {
         "fillLevelTarget": 10000000,
-        "rowsIngested": 10280960,
-        "ingestSecondsElapsed": 40.570054621,
+        "rowsIngested": 10518528,
+        "ingestSecondsElapsed": 69.130426492,
+        "digestSeconds": 600.46114678,
+        "digestTimedOut": true,
         "probes": [
           {
             "name": "endpoints-grouped",
             "path": "/api/endpoints/grouped",
-            "latencyMs": 437.671008,
-            "ok": true
+            "latencyMs": 6000.232965,
+            "ok": false,
+            "error": "Post \"http://10.0.0.2/api/endpoints/grouped?projectId=a621ac4a-7796-4851-bf00-df3631f87a0b\": context deadline exceeded"
           },
           {
             "name": "endpoints-chart",
             "path": "/api/endpoints/chart",
-            "latencyMs": 304.181004,
-            "ok": true
+            "latencyMs": 6005.662727,
+            "ok": false,
+            "error": "Post \"http://10.0.0.2/api/endpoints/chart?projectId=a621ac4a-7796-4851-bf00-df3631f87a0b\": context deadline exceeded"
           },
           {
             "name": "exception-stack-traces",
             "path": "/api/exception-stack-traces",
-            "latencyMs": 4.126855,
-            "ok": true
+            "latencyMs": 6005.671618,
+            "ok": false,
+            "error": "Post \"http://10.0.0.2/api/exception-stack-traces?projectId=a621ac4a-7796-4851-bf00-df3631f87a0b\": context deadline exceeded"
           }
         ],
-        "medianLatencyMs": 304.181004,
-        "readLatencyMs": 304.181004,
-        "readOk": true,
-        "passed": true
-      },
-      {
-        "fillLevelTarget": 100000000,
-        "rowsIngested": 103022592,
-        "ingestSecondsElapsed": 221.832406721,
-        "probes": [
-          {
-            "name": "endpoints-grouped",
-            "path": "/api/endpoints/grouped",
-            "latencyMs": 0.887397,
-            "ok": false,
-            "error": "Post \"http://10.0.0.2/api/endpoints/grouped?projectId=bf21b38f-8203-40d5-a2a7-db46354566fa\": dial tcp 10.0.0.2:80: connect: connection refused"
-          },
-          {
-            "name": "endpoints-chart",
-            "path": "/api/endpoints/chart",
-            "latencyMs": 0.49261400000000005,
-            "ok": false,
-            "error": "Post \"http://10.0.0.2/api/endpoints/chart?projectId=bf21b38f-8203-40d5-a2a7-db46354566fa\": dial tcp 10.0.0.2:80: connect: connection refused"
-          },
-          {
-            "name": "exception-stack-traces",
-            "path": "/api/exception-stack-traces",
-            "latencyMs": 0.397733,
-            "ok": false,
-            "error": "Post \"http://10.0.0.2/api/exception-stack-traces?projectId=bf21b38f-8203-40d5-a2a7-db46354566fa\": dial tcp 10.0.0.2:80: connect: connection refused"
-          }
-        ],
-        "medianLatencyMs": 0.49261400000000005,
-        "readLatencyMs": 0.49261400000000005,
+        "medianLatencyMs": 6005.662727,
+        "readLatencyMs": 6005.662727,
         "readOk": false,
         "passed": false,
-        "failReason": "probe endpoints-grouped failed: Post \"http://10.0.0.2/api/endpoints/grouped?projectId=bf21b38f-8203-40d5-a2a7-db46354566fa\": dial tcp 10.0.0.2:80: connect: connection refused (latency 1ms)"
+        "failReason": "probe endpoints-grouped failed: Post \"http://10.0.0.2/api/endpoints/grouped?projectId=a621ac4a-7796-4851-bf00-df3631f87a0b\": context deadline exceeded (latency 6000ms)"
       }
     ],
-    "maxFillLevelPassed": 10000000
+    "maxFillLevelPassed": 1000000
   },
-  "maxFillLevelPassed": 10000000,
-  "bytesOnDisk": 234864640,
-  "storedRows": 103022592,
-  "sutContainer": {
-    "status": "exited",
-    "oomKilled": true,
-    "exitCode": 137,
-    "restartCount": 3
-  }
+  "maxFillLevelPassed": 1000000,
+  "sutContainer": {}
 }

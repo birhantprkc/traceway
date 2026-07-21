@@ -3,8 +3,8 @@
   "mode": "duckdb",
   "signal": "logs",
   "scenario": "read-probe",
-  "startedAt": "2026-07-20T13:38:52Z",
-  "endedAt": "2026-07-20T13:40:01Z",
+  "startedAt": "2026-07-21T10:18:05Z",
+  "endedAt": "2026-07-21T10:29:15Z",
   "readProbe": {
     "endpoints": [
       {
@@ -29,35 +29,37 @@
       {
         "fillLevelTarget": 1000000,
         "rowsIngested": 3129344,
-        "ingestSecondsElapsed": 36.173149845,
+        "ingestSecondsElapsed": 36.427747303,
+        "digestSeconds": 600.42227659,
+        "digestTimedOut": true,
         "probes": [
           {
             "name": "logs-severity-error",
             "path": "/api/logs",
-            "latencyMs": 6005.229562,
+            "latencyMs": 6000.205114,
             "ok": false,
-            "error": "Post \"http://10.0.0.2/api/logs?projectId=6b28dd21-8b6c-45bf-90a1-c30a667593fb\": context deadline exceeded"
+            "error": "Post \"http://10.0.0.2/api/logs?projectId=c953ecec-e492-4c23-ad03-2ef4022a6769\": context deadline exceeded"
           },
           {
             "name": "logs-body-search",
             "path": "/api/logs",
-            "latencyMs": 6005.237126,
+            "latencyMs": 6005.645981,
             "ok": false,
-            "error": "Post \"http://10.0.0.2/api/logs?projectId=6b28dd21-8b6c-45bf-90a1-c30a667593fb\": context deadline exceeded"
+            "error": "Post \"http://10.0.0.2/api/logs?projectId=c953ecec-e492-4c23-ad03-2ef4022a6769\": context deadline exceeded"
           },
           {
             "name": "logs-trace-id",
             "path": "/api/logs",
-            "latencyMs": 6000.9449540000005,
+            "latencyMs": 6005.5903180000005,
             "ok": false,
-            "error": "Post \"http://10.0.0.2/api/logs?projectId=6b28dd21-8b6c-45bf-90a1-c30a667593fb\": context deadline exceeded"
+            "error": "Post \"http://10.0.0.2/api/logs?projectId=c953ecec-e492-4c23-ad03-2ef4022a6769\": context deadline exceeded"
           }
         ],
-        "medianLatencyMs": 6005.229562,
-        "readLatencyMs": 6005.229562,
+        "medianLatencyMs": 6005.5903180000005,
+        "readLatencyMs": 6005.5903180000005,
         "readOk": false,
         "passed": false,
-        "failReason": "probe logs-severity-error failed: Post \"http://10.0.0.2/api/logs?projectId=6b28dd21-8b6c-45bf-90a1-c30a667593fb\": context deadline exceeded (latency 6005ms)"
+        "failReason": "probe logs-severity-error failed: Post \"http://10.0.0.2/api/logs?projectId=c953ecec-e492-4c23-ad03-2ef4022a6769\": context deadline exceeded (latency 6000ms)"
       }
     ],
     "maxFillLevelPassed": 0

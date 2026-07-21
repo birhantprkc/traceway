@@ -12,13 +12,13 @@ Failure: a read probe exceeded the configured threshold (default 5000ms) or retu
 
 | Tier | Mode | Max spans rows passed | Read latency @ max (ms) | First failing fill | Read latency @ failing (ms) |
 |------|------|----------------|-------------------|--------------------|------------------------|
-| ccx13 | duckdb | 10,000,000 | 304 | 103,022,592 | 0 |
+| ccx13 | duckdb | 1,000,000 | 206 | 10,518,528 | 6005 |
 
 ### Metrics — probing `/api/metrics/application`
 
 | Tier | Mode | Max metric_points rows passed | Read latency @ max (ms) | First failing fill | Read latency @ failing (ms) |
 |------|------|----------------|-------------------|--------------------|------------------------|
-| ccx13 | duckdb | 100,000,000 | 2710 | 1,000,087,552 | 0 |
+| ccx13 | duckdb | 100,000,000 | 3114 | 1,000,054,784 | 0 |
 
 ### Logs — probing `/api/logs`
 
