@@ -27,7 +27,14 @@ type readProbeStep struct {
 	// DroppedRows is cumulative since scenario start, mirroring RowsIngested.
 	// Nonzero means the SUT silently discarded rows during fill, so the true
 	// table size is RowsIngested minus DroppedRows.
-	DroppedRows     int64                 `json:"droppedRows,omitempty"`
+	DroppedRows int64 `json:"droppedRows,omitempty"`
+	// DigestSeconds is how long the SUT's engine needed after the fill before
+	// its db+WAL file sizes went stable (the WAL-checkpoint gate). Probes run
+	// after this wait, so latencies measure steady-state query cost, not a
+	// mid-checkpoint wedge. DigestTimedOut means the cap expired first and
+	// the probes ran against a possibly still-digesting engine.
+	DigestSeconds   float64               `json:"digestSeconds,omitempty"`
+	DigestTimedOut  bool                  `json:"digestTimedOut,omitempty"`
 	Probes          []endpointProbeResult `json:"probes"`
 	MedianLatencyMs float64               `json:"medianLatencyMs"`
 	// Back-compat: equals MedianLatencyMs and AND-of-all-probe-Ok respectively.
@@ -82,6 +89,11 @@ func runReadProbe(ctx context.Context, cfg config, ing *ingester, ingestStats *l
 		res.ReadPath = endpoints[0].Path
 	}
 
+	// The shared client carries a 30s Timeout that would silently cap probes
+	// below a raised --read-threshold-ms; probes get their own client so the
+	// per-probe context (threshold + 1s) is the only deadline.
+	probeClient := &http.Client{Transport: client.Transport}
+
 	ing.SetBatchSize(cfg.fillBatchSize)
 	ing.SetRequestRate(cfg.fillRequestRate)
 
@@ -123,8 +135,13 @@ func runReadProbe(ctx context.Context, cfg config, ing *ingester, ingestStats *l
 			}
 		}
 
-		fmt.Fprintf(stderrPrefix(), "read-probe fill=%d rows reached in %.1fs (signal=%s) — settling %ds\n",
-			step.RowsIngested, step.IngestSecondsElapsed, cfg.signal, res.SettleSeconds)
+		step.DigestSeconds, step.DigestTimedOut = waitForIngestDigestion(ctx, cfg, client.Transport)
+		if step.DigestTimedOut {
+			fmt.Fprintf(stderrPrefix(), "read-probe: engine still digesting after %.0fs cap — probing anyway\n", step.DigestSeconds)
+		}
+
+		fmt.Fprintf(stderrPrefix(), "read-probe fill=%d rows reached in %.1fs (signal=%s) — digested in %.1fs, settling %ds\n",
+			step.RowsIngested, step.IngestSecondsElapsed, cfg.signal, step.DigestSeconds, res.SettleSeconds)
 
 		select {
 		case <-time.After(cfg.settleSeconds):
@@ -142,7 +159,7 @@ func runReadProbe(ctx context.Context, cfg config, ing *ingester, ingestStats *l
 		allOk := true
 		latencies := make([]float64, 0, len(endpoints))
 		for _, ep := range endpoints {
-			latency, err := probeReadEndpoint(ctx, client, cfg, ep)
+			latency, err := probeReadEndpoint(ctx, probeClient, cfg, ep)
 			pr := endpointProbeResult{
 				Name:      ep.Name,
 				Path:      ep.Path,
@@ -259,6 +276,53 @@ func endpointSetForSignal(signal string) []readProbeEndpoint {
 		}
 	}
 	return nil
+}
+
+// waitForIngestDigestion blocks until the SUT's storage engine has absorbed
+// the fill burst, or cfg.maxDigestWait expires. DuckDB checkpoints the WAL
+// asynchronously after ingest stops; probing mid-checkpoint on a small box
+// measures a wedged engine, not query cost — the symptom is sub-millisecond
+// queries timing out uniformly. /api/health/deep is the canary: on DuckDB it
+// executes real engine queries, so it only answers promptly when a dashboard
+// query would too. "Digested" means two consecutive successful polls, 5s
+// apart, reporting identical db+WAL file sizes. Backends without engine
+// gauges (SQLite, ClickHouse) return on the first successful poll, keeping
+// their timing behavior identical to before this gate existed. Returns the
+// seconds waited and whether the cap expired first.
+func waitForIngestDigestion(ctx context.Context, cfg config, transport http.RoundTripper) (float64, bool) {
+	if cfg.maxDigestWait <= 0 {
+		return 0, false
+	}
+	pollClient := &http.Client{Timeout: 5 * time.Second, Transport: transport}
+	start := time.Now()
+	deadline := start.Add(cfg.maxDigestWait)
+	var prev *ingestStatsSnapshot
+	for time.Now().Before(deadline) {
+		if ctx.Err() != nil {
+			return time.Since(start).Seconds(), false
+		}
+		_, cur := fetchDeepHealth(ctx, cfg, pollClient)
+		if cur.Reachable {
+			if cur.DBSizeBytes == 0 && cur.WALSizeBytes == 0 {
+				return time.Since(start).Seconds(), false
+			}
+			if prev != nil && prev.DBSizeBytes == cur.DBSizeBytes && prev.WALSizeBytes == cur.WALSizeBytes {
+				return time.Since(start).Seconds(), false
+			}
+			snap := cur
+			prev = &snap
+		} else {
+			// A slow or failed poll is the engine (or the box) not answering —
+			// it breaks the stability streak rather than counting toward it.
+			prev = nil
+		}
+		select {
+		case <-time.After(5 * time.Second):
+		case <-ctx.Done():
+			return time.Since(start).Seconds(), false
+		}
+	}
+	return time.Since(start).Seconds(), true
 }
 
 // probeReadEndpoint issues one HTTP request for the given endpoint and returns

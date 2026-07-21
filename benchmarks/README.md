@@ -46,6 +46,21 @@ the `--scenario` flag.
   5 s). Results land in `benchmarks/results-probe/`. Answers "how big
   can the table grow before the dashboard read on this endpoint cliffs?"
 
+  Between the fill and the probes sits a **digestion gate**
+  (`--max-digest-wait`, default 10 m): the loadgen polls `/api/health/deep`
+  until the engine's db+WAL file sizes are stable across two consecutive
+  polls. DuckDB checkpoints its WAL asynchronously after ingest stops, and
+  on a small tier that checkpoint can outlast the settle window — probing
+  through it produces uniform timeouts on sub-millisecond queries
+  (a wedged engine, not query cost; observed as a nondeterministic
+  logs/spans "cliff" on ccx13 before the gate existed). The wait is
+  recorded per fill level as `digestSeconds` (with `digestTimedOut` when
+  the cap expired), so "how long until the box answers again after a
+  burst" is itself a published number. Backends without engine gauges
+  (SQLite, ClickHouse) pass the gate on the first poll, and the probes
+  use a client without the shared 30 s timeout so `--read-threshold-ms`
+  above 29 s actually takes effect.
+
 The two scenarios write to sibling folders so one never overwrites the
 other. Each folder is wiped on each dispatch of its scenario.
 

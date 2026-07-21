@@ -116,6 +116,14 @@ if [[ "${SCENARIO}" == "read-probe" ]]; then
     fi
 fi
 
+# Throughput Phase 2 ladder override (e.g. 1,5,10,15,20,25). The default
+# 5-to-25 jump can skip straight from a passing step to one that kills the
+# SUT, and post-fail bisection needs a live SUT — a finer ramp pins the
+# cliff from the passing side instead. Loadgen ignores it outside throughput.
+if [[ "${SCENARIO}" == "throughput" && -n "${BENCH_PHASE2_REQUEST_RATES:-}" ]]; then
+    extra_args+=( --phase2-request-rates "${BENCH_PHASE2_REQUEST_RATES}" )
+fi
+
 # SQLite and DuckDB have no merge-idle equivalent — /health/deep returns
 # chReachable=false and waitForMergesIdle skips immediately. Compensate with a
 # longer per-step drain and a fixed inter-phase cooldown so the SUT can finish
