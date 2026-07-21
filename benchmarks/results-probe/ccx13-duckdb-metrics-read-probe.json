@@ -3,8 +3,8 @@
   "mode": "duckdb",
   "signal": "metrics",
   "scenario": "read-probe",
-  "startedAt": "2026-07-21T09:09:09Z",
-  "endedAt": "2026-07-21T10:11:34Z",
+  "startedAt": "2026-07-21T14:47:29Z",
+  "endedAt": "2026-07-21T15:46:57Z",
   "readProbe": {
     "endpoints": [
       {
@@ -28,139 +28,138 @@
     "steps": [
       {
         "fillLevelTarget": 1000000,
-        "rowsIngested": 1155072,
-        "ingestSecondsElapsed": 3.773906448,
-        "digestSeconds": 5.006256428,
+        "rowsIngested": 2580480,
+        "ingestSecondsElapsed": 8.475577363,
+        "digestSeconds": 5.007948499,
         "probes": [
           {
             "name": "metrics-server",
             "path": "/api/metrics/server",
-            "latencyMs": 156.70147400000002,
+            "latencyMs": 146.0298,
             "ok": true
           },
           {
             "name": "metrics-application",
             "path": "/api/metrics/application",
-            "latencyMs": 114.659787,
+            "latencyMs": 135.084231,
             "ok": true
           },
           {
             "name": "dashboard",
             "path": "/api/dashboard",
-            "latencyMs": 177.931375,
+            "latencyMs": 213.30516899999998,
             "ok": true
           }
         ],
-        "medianLatencyMs": 156.70147400000002,
-        "readLatencyMs": 156.70147400000002,
+        "medianLatencyMs": 146.0298,
+        "readLatencyMs": 146.0298,
         "readOk": true,
         "passed": true
       },
       {
         "fillLevelTarget": 10000000,
-        "rowsIngested": 10084352,
-        "ingestSecondsElapsed": 32.145869453,
-        "digestSeconds": 5.006441803,
+        "rowsIngested": 11550720,
+        "ingestSecondsElapsed": 30.855640677,
+        "digestSeconds": 5.007986705,
         "probes": [
           {
             "name": "metrics-server",
             "path": "/api/metrics/server",
-            "latencyMs": 403.811263,
+            "latencyMs": 343.63286500000004,
             "ok": true
           },
           {
             "name": "metrics-application",
             "path": "/api/metrics/application",
-            "latencyMs": 430.051894,
+            "latencyMs": 381.574624,
             "ok": true
           },
           {
             "name": "dashboard",
             "path": "/api/dashboard",
-            "latencyMs": 678.7028899999999,
+            "latencyMs": 601.0998159999999,
             "ok": true
           }
         ],
-        "medianLatencyMs": 430.051894,
-        "readLatencyMs": 430.051894,
+        "medianLatencyMs": 381.574624,
+        "readLatencyMs": 381.574624,
         "readOk": true,
         "passed": true
       },
       {
         "fillLevelTarget": 100000000,
-        "rowsIngested": 100360192,
-        "ingestSecondsElapsed": 306.935291402,
-        "digestSeconds": 5.003737541,
+        "rowsIngested": 101490688,
+        "ingestSecondsElapsed": 305.46684237,
+        "digestSeconds": 5.003962309,
         "probes": [
           {
             "name": "metrics-server",
             "path": "/api/metrics/server",
-            "latencyMs": 2548.953915,
+            "latencyMs": 2467.547592,
             "ok": true
           },
           {
             "name": "metrics-application",
             "path": "/api/metrics/application",
-            "latencyMs": 3114.2537730000004,
+            "latencyMs": 3001.6052050000003,
             "ok": true
           },
           {
             "name": "dashboard",
             "path": "/api/dashboard",
-            "latencyMs": 4930.21749,
+            "latencyMs": 4752.907417,
             "ok": true
           }
         ],
-        "medianLatencyMs": 3114.2537730000004,
-        "readLatencyMs": 3114.2537730000004,
+        "medianLatencyMs": 3001.6052050000003,
+        "readLatencyMs": 3001.6052050000003,
         "readOk": true,
         "passed": true
       },
       {
         "fillLevelTarget": 1000000000,
-        "rowsIngested": 1000054784,
-        "ingestSecondsElapsed": 2734.611078861,
-        "digestSeconds": 600.465126817,
-        "digestTimedOut": true,
+        "rowsIngested": 1001472000,
+        "ingestSecondsElapsed": 3132.254449848,
+        "digestSeconds": 5.004906965,
         "probes": [
           {
             "name": "metrics-server",
             "path": "/api/metrics/server",
-            "latencyMs": 1.591393,
+            "latencyMs": 6005.238989,
             "ok": false,
-            "error": "Get \"http://10.0.0.2/api/metrics/server?fromDate=2026-07-20T10%3A11%3A34Z&projectId=66c701a3-529c-4a28-8074-aae984066482&toDate=2026-07-21T10%3A11%3A34Z\": dial tcp 10.0.0.2:80: connect: connection refused"
+            "error": "Get \"http://10.0.0.2/api/metrics/server?fromDate=2026-07-20T15%3A46%3A39Z&projectId=3d534138-1f31-4835-b08e-f841496cd3e9&toDate=2026-07-21T15%3A46%3A39Z\": context deadline exceeded"
           },
           {
             "name": "metrics-application",
             "path": "/api/metrics/application",
-            "latencyMs": 0.408595,
+            "latencyMs": 6000.54946,
             "ok": false,
-            "error": "Get \"http://10.0.0.2/api/metrics/application?fromDate=2026-07-20T10%3A11%3A34Z&projectId=66c701a3-529c-4a28-8074-aae984066482&toDate=2026-07-21T10%3A11%3A34Z\": dial tcp 10.0.0.2:80: connect: connection refused"
+            "error": "Get \"http://10.0.0.2/api/metrics/application?fromDate=2026-07-20T15%3A46%3A45Z&projectId=3d534138-1f31-4835-b08e-f841496cd3e9&toDate=2026-07-21T15%3A46%3A45Z\": context deadline exceeded"
           },
           {
             "name": "dashboard",
             "path": "/api/dashboard",
-            "latencyMs": 0.29740099999999997,
+            "latencyMs": 6005.2873389999995,
             "ok": false,
-            "error": "Get \"http://10.0.0.2/api/dashboard?fromDate=2026-07-20T10%3A11%3A34Z&projectId=66c701a3-529c-4a28-8074-aae984066482&toDate=2026-07-21T10%3A11%3A34Z\": dial tcp 10.0.0.2:80: connect: connection refused"
+            "error": "Get \"http://10.0.0.2/api/dashboard?fromDate=2026-07-20T15%3A46%3A51Z&projectId=3d534138-1f31-4835-b08e-f841496cd3e9&toDate=2026-07-21T15%3A46%3A51Z\": context deadline exceeded"
           }
         ],
-        "medianLatencyMs": 0.408595,
-        "readLatencyMs": 0.408595,
+        "medianLatencyMs": 6005.238989,
+        "readLatencyMs": 6005.238989,
         "readOk": false,
         "passed": false,
-        "failReason": "probe metrics-server failed: Get \"http://10.0.0.2/api/metrics/server?fromDate=2026-07-20T10%3A11%3A34Z&projectId=66c701a3-529c-4a28-8074-aae984066482&toDate=2026-07-21T10%3A11%3A34Z\": dial tcp 10.0.0.2:80: connect: connection refused (latency 2ms)"
+        "failReason": "probe metrics-server failed: Get \"http://10.0.0.2/api/metrics/server?fromDate=2026-07-20T15%3A46%3A39Z&projectId=3d534138-1f31-4835-b08e-f841496cd3e9&toDate=2026-07-21T15%3A46%3A39Z\": context deadline exceeded (latency 6005ms)"
       }
     ],
     "maxFillLevelPassed": 100000000
   },
   "maxFillLevelPassed": 100000000,
-  "bytesOnDisk": 8903426048,
-  "storedRows": 1000054784,
+  "bytesOnDisk": 10823938048,
+  "storedRows": 1001472000,
   "sutContainer": {
-    "status": "exited",
-    "oomKilled": true,
-    "exitCode": 137,
-    "restartCount": 3
+    "status": "running",
+    "oomKilled": false,
+    "exitCode": 0,
+    "restartCount": 0
   }
 }
