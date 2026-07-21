@@ -100,6 +100,7 @@ func runReadProbe(ctx context.Context, cfg config, ing *ingester, ingestStats *l
 	// Reset the ingester counters before starting so totalIngested reflects
 	// only what this scenario sent.
 	ing.SnapshotAndResetItems()
+	ing.SnapshotAndResetOkItems()
 	ingestStats.SnapshotAndReset()
 
 	_, sutStatsBase := fetchDeepHealth(ctx, cfg, client)
@@ -122,8 +123,7 @@ func runReadProbe(ctx context.Context, cfg config, ing *ingester, ingestStats *l
 		step.RowsIngested = totalIngested
 
 		// Drain whatever bumped between Stop and Snapshot.
-		extraAttempted, _ := ing.SnapshotAndResetItems()
-		totalIngested += extraAttempted
+		totalIngested += ing.SnapshotAndResetOkItems()
 		step.RowsIngested = totalIngested
 
 		if sutStatsBase.Reachable {
@@ -139,6 +139,10 @@ func runReadProbe(ctx context.Context, cfg config, ing *ingester, ingestStats *l
 		if step.DigestTimedOut {
 			fmt.Fprintf(stderrPrefix(), "read-probe: engine still digesting after %.0fs cap — probing anyway\n", step.DigestSeconds)
 		}
+		// ClickHouse's post-ingest work is merges rather than a WAL
+		// checkpoint; give it the same courtesy before probing. Skips
+		// instantly on backends where CH isn't reachable.
+		waitForMergesIdle(ctx, cfg, client, fmt.Sprintf("fill %d -> probe", target))
 
 		fmt.Fprintf(stderrPrefix(), "read-probe fill=%d rows reached in %.1fs (signal=%s) — digested in %.1fs, settling %ds\n",
 			step.RowsIngested, step.IngestSecondsElapsed, cfg.signal, step.DigestSeconds, res.SettleSeconds)
@@ -212,10 +216,12 @@ func runReadProbe(ctx context.Context, cfg config, ing *ingester, ingestStats *l
 	return res
 }
 
-// pollFillProgress drains attempted-item counters from the ingester until the
-// target is reached or the context cancels. Sub-second polling keeps overshoot
-// small (at fill-batch=8192 × 100 req/s the loadgen sends ~800k items/sec, so
-// 200ms granularity overshoots by ≤160k items — negligible at 100M fill).
+// pollFillProgress drains confirmed-item counters from the ingester until the
+// target is reached or the context cancels. Counting only 2xx-confirmed items
+// (not attempts) keeps the fill honest when the SUT sheds load with 503s.
+// Sub-second polling keeps overshoot small (at fill-batch=8192 × 100 req/s
+// the loadgen sends ~800k items/sec, so 200ms granularity overshoots by
+// ≤160k items — negligible at 100M fill).
 func pollFillProgress(ctx context.Context, ing *ingester, totalIngested *int64, target int64) {
 	tick := time.NewTicker(200 * time.Millisecond)
 	defer tick.Stop()
@@ -224,8 +230,7 @@ func pollFillProgress(ctx context.Context, ing *ingester, totalIngested *int64, 
 		case <-ctx.Done():
 			return
 		case <-tick.C:
-			attempted, _ := ing.SnapshotAndResetItems()
-			*totalIngested += attempted
+			*totalIngested += ing.SnapshotAndResetOkItems()
 		}
 	}
 }
