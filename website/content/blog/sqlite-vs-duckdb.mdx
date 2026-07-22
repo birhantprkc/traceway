@@ -21,7 +21,7 @@ This is what came back:
 | Spans read cliff | 100k rows (2.27 s median) | 10M rows (902 ms median) | 100x |
 | Logs read cliff | 100k rows (114 ms median) | 10M rows (85 ms median) | 100x |
 
-A read cliff, throughout this series, is the largest table size at which real dashboard pages still load: the median of three endpoint probes at or under 5 seconds, none timing out.
+A read cliff, throughout this series, is the largest table size at which real dashboard pages still load: the median of three endpoint probes at or under 5 seconds, none timing out. It earns the name because of what sits one 10x step past it: queries don't slow down, they stop coming back.
 
 <mark>Each signal's read cliff sits exactly 100x further out on DuckDB than on SQLite, at equal or better latency, on identical hardware.</mark> I checked that symmetry against the raw JSON twice before I believed it. The box also ingested a billion metric points in under an hour into 10.8 GB of disk and stayed up, a scale the SQLite benchmark never got within 100x of. Logs, the signal post 2 said to keep off SQLite entirely, are DuckDB's biggest win.
 
@@ -33,7 +33,7 @@ Here's the plan. Methodology first, including what changed in the harness since 
 
 ## How I measured
 
-The setup is post 2's, so I'll keep it short: a system under test (SUT) running the Traceway binary and a separate load generator on a private link, both in Hetzner's Nuremberg datacenter, OTLP over gzipped protobuf, uniform-random data in bounded ranges. Traceway built from commit [`14b4aa6e`](https://github.com/tracewayapp/traceway/commit/14b4aa6e175946d40383d938db22cfea8c23c695), Ubuntu 24.04, retention off during the bench.
+The setup is post 2's, so I'll keep it short: a system under test (SUT) running the Traceway binary and a separate load generator on a private link, both in Hetzner's Nuremberg datacenter, OTLP, the OpenTelemetry wire protocol, over gzipped protobuf, uniform-random data in bounded ranges. Traceway built from commit [`14b4aa6e`](https://github.com/tracewayapp/traceway/commit/14b4aa6e175946d40383d938db22cfea8c23c695), Ubuntu 24.04, retention off during the bench.
 
 Two scenarios per signal. The **throughput ramp**: batch-size ramp at fixed rate, then a request-rate ramp at the winning batch (this time with a finer rate ladder, 1 through 25 req/sec, because the interesting cliffs turned out to sit between post 2's coarser steps), then a small-batch high-rate ramp shaped like an SDK fleet. A step passes at under 5% errors and at least 70% of target rate achieved. The **read-probe**: fill the table to 1M, 10M, 100M, 1B, then 5B rows, and at each level load three real dashboard endpoints per signal, with a level passing when the median is at or under 5 s and nothing hits the 6 s timeout. The 5-second bar is generous on purpose and post 2's discussion of that still applies unchanged.
 
@@ -63,7 +63,7 @@ The bottom of each ramp holds one more first for the series: the SDK-fleet shape
 
 ## Reads: every cliff, 100x later
 
-Writes were the appetizer; reads are why anyone reaches for a columnar engine, and they're where I had the most to lose. Post 2's most-quoted line was about read cliffs, the row count where the dashboard stops loading, and if DuckDB only matched SQLite here, the whole build would be a curiosity. Before running it I told myself I'd be satisfied if each signal's cliff moved 10x.
+Writes were the appetizer; reads are why anyone reaches for a columnar engine, and they're where I had the most to lose. Post 2's most-quoted line was about read cliffs, the last row count where the dashboard still loads, and if DuckDB only matched SQLite here, the whole build would be a curiosity. Before running it I told myself I'd be satisfied if each signal's cliff moved 10x.
 
 | Fill level | Metrics | Spans | Logs |
 |---|---|---|---|
@@ -110,7 +110,7 @@ The 60-second run also caught a smaller flaw for the fix list: a cancelled dashb
 
 ## What fits comfortably, on each build
 
-Post 2's small-fleet shape, ten backends emitting 50 spans/sec, 200 log records/sec, and 10 metric points/sec each, held against both builds:
+Cliffs are ceilings; what matters day to day is how far under them a real fleet sits. The small-fleet shape from post 2, ten backends emitting 50 spans/sec, 200 log records/sec, and 10 metric points/sec each, held against both builds:
 
 | | SQLite envelope used | DuckDB envelope used |
 |---|---|---|
@@ -140,7 +140,7 @@ The other surprise was logs, again. Post 2's verdict was "keep logs off SQLite,"
 
 Post 1 claimed a $16 box could run your observability stack. Post 2 tested the claim and returned it with an exception: not logs, and mind the read cliffs. This post retires the exception. On the same box, the DuckDB build writes every signal faster than a small fleet emits, serves dashboards at row counts the SQLite build cannot approach, and turns logs from the signal post 2 told you to keep off the box into the best result in the dataset. A billion metric points cost 10.8 GB of disk. I came into the week hoping to double post 2's numbers; the smallest improvement in the table is 3x.
 
-So if you self-host Traceway on a single machine, run the DuckDB build ([`docker-compose.duckdb.yml`](https://github.com/tracewayapp/traceway/blob/main/docker-compose.duckdb.yml) in the repo brings it up). One config note before you do: that compose file ships a conservative 2 GB DuckDB memory cap and leaves the checkpoint threshold at DuckDB's 16 MB default, while the benchmark ran on 4 GB and 256 MB, so set `DUCKDB_MEMORY_LIMIT` and `DUCKDB_CHECKPOINT_THRESHOLD` to match if you want these numbers. I would only reach for the SQLite build in two situations, and both are real. If you need a binary that compiles anywhere Go does, SQLite wins: the DuckDB build needs CGO and glibc, so its container image is Debian rather than Alpine. And if your volume lives comfortably under post 2's numbers, SQLite's storage engine doing all its work inline, no deferred checkpoints, no digestion window to wait out, remains the simplest thing that works. The moment logs matter, or retention past an hour matters, the comparison stops being close.
+So if you self-host Traceway on a single machine, run the DuckDB build ([`docker-compose.duckdb.yml`](https://github.com/tracewayapp/traceway/blob/main/docker-compose.duckdb.yml) in the repo brings it up). One config note before you do: that compose file ships a conservative 2 GB DuckDB memory cap and leaves the checkpoint threshold at DuckDB's 16 MB default, while the benchmark ran on 4 GB and 256 MB, so set `DUCKDB_MEMORY_LIMIT` and `DUCKDB_CHECKPOINT_THRESHOLD` to match if you want these numbers. I would only reach for the SQLite build in two situations, and both are real. If you need a binary that compiles anywhere Go does, SQLite wins: the DuckDB build needs CGO, Go's C bridge, and glibc, so its container image is Debian rather than Alpine. And if your volume lives comfortably under post 2's numbers, SQLite's storage engine doing all its work inline, no deferred checkpoints, no digestion window to wait out, remains the simplest thing that works. The moment logs matter, or retention past an hour matters, the comparison stops being close.
 
 One asterisk belongs on the whole table: these numbers exist because the benchmark first found a crash bug in my ingest path, and I fixed it before rerunning everything. If you run the DuckDB build, run a version with the admission gate. The engine was never the problem. The code in front of it was, and finding that out is the most useful thing this comparison produced.
 
