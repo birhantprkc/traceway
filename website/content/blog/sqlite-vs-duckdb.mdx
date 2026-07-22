@@ -23,7 +23,7 @@ This is what came back:
 
 A read cliff, throughout this series, is the largest table size at which real dashboard pages still load: the median of three endpoint probes at or under 5 seconds, none timing out.
 
-<mark>Each signal's read cliff sits exactly 100x further out on DuckDB than on SQLite, at equal or better latency, on identical hardware.</mark> I checked that symmetry against the raw JSON twice before I believed it. The box also ingested a billion metric points in 52 minutes into 10.8 GB of disk and stayed up, a scale the SQLite benchmark never got within 100x of. Logs, the signal post 2 said to keep off SQLite entirely, is DuckDB's biggest win.
+<mark>Each signal's read cliff sits exactly 100x further out on DuckDB than on SQLite, at equal or better latency, on identical hardware.</mark> I checked that symmetry against the raw JSON twice before I believed it. The box also ingested a billion metric points in under an hour into 10.8 GB of disk and stayed up, a scale the SQLite benchmark never got within 100x of. Logs, the signal post 2 said to keep off SQLite entirely, are DuckDB's biggest win.
 
 ## What's actually being compared
 
@@ -41,7 +41,7 @@ Three things differ from post 2's harness, all disclosed:
 
 1. **The loadgen grew.** Post 2 generated load from a second CCX13, which SQLite's ceilings never stressed. On my first DuckDB spans run, that loadgen box died mid-ramp while the database sat at 0% errors, the traffic generator broke before the thing it was breaking. The loadgen is now a CCX23. The SUT, the box every number describes, is unchanged.
 2. **The digestion gate.** DuckDB checkpoints its write-ahead log after ingest stops; probe during that and you measure a busy engine, not a query. The read-probe now polls the backend's deep-health endpoint until the database and WAL file sizes are stable, records the wait per level (5 seconds at every level in the final runs), then probes. SQLite reports no engine gauges and skips the wait, so its post 2 numbers were produced identically.
-3. **Only accepted rows count.** The fill counts items confirmed by 2xx responses, not items attempted, which matters once the backend learns to refuse work. Fills still overshoot their targets slightly, so tables report actual row counts.
+3. **Only accepted rows count.** The fill counts items confirmed by 2xx responses, not items attempted, which matters once the backend learns to refuse work. Fills overshoot their targets, at the smallest level by as much as 2.6x, so I quote actual row counts wherever the difference matters.
 
 Caveats. These are single-shot runs, one throughput run and one read ladder per signal. Post 2 promised medians of three reps starting with this post, and I'm walking that back one more time: the fix-and-rerun cycle below consumed the budget, and I'd rather publish single-shot numbers with that admission than sit on them. The key cells reproduced across the debugging runs (100M metrics reads landed between 2.7 s and 3.2 s across four runs on different days), but the protocol is single-shot. "Passing" still means three named endpoints on freshly written data on an otherwise idle box; read-under-ingest remains future work.
 
@@ -49,7 +49,7 @@ One more disclosure, this one in the backend rather than the harness. My first D
 
 ## Writes: 4x, 3x, 15x
 
-| Signal | SQLite | DuckDB | Winning shape (DuckDB) | First failing step |
+| Signal | SQLite | DuckDB | Winning shape (DuckDB) | Lowest failing step |
 |---|---|---|---|---|
 | Metrics | 61,712/sec | **254,242/sec** | batch 16384 × 20 req/sec, p50 3.2 s | 22.5 req/sec, 12.2% errors |
 | Spans | 30,508/sec | **95,737/sec** | batch 16384 × 7.5 req/sec, p50 1.2 s | 8.75 req/sec, 9.7% errors |
@@ -57,26 +57,26 @@ One more disclosure, this one in the backend rather than the harness. My first D
 
 Going in, my quiet bar for this table was "double SQLite and I'll call it a win," and the one cell I braced for was logs. Post 2's starkest result was logs writing at 4,877/sec into a wall at 5 req/sec so sharp that 1.5x more requests took the error rate from 0% to 98%. That wall is the cell that moved most: the DuckDB build writes logs at fifteen times SQLite's rate, and the wall became a slope of polite refusals. The signal with the lowest SQLite ceiling and the highest real-world volume is the one the columnar engine helps most, which is either obvious in hindsight or backwards from everything post 2 trained me to expect, and I held the second view until this table existed.
 
-The "first failing step" column matters as much as the headline column. Every failing step in it is clean 503 rejection from the admission gate, and the container finished all three runs with zero restarts. That is the same graceful-cliff behavior SQLite showed in post 2, and DuckDB only exhibits it because of the fix I disclosed above; before it, this table could not be produced at all.
+The "lowest failing step" column matters as much as the headline column, and lowest is the right word: the ladder bisects between the last passing and first failing rate, so those are the smallest rates that fail, not the first failures in wall-clock order. Every failure in the column is the backend refusing work rather than falling over: the run logs show 503s from the admission gate, the archived JSON shows zero insert failures and zero dropped rows behind them, and the container finished all three runs with zero restarts. That is the same graceful-cliff behavior SQLite showed in post 2, and DuckDB only exhibits it because of the fix I disclosed above; before it, this table could not be produced at all.
 
-The bottom of each ramp holds one more first for the series: the SDK-fleet shape, thousands of small batches per second rather than a few fat ones, which post 2 could only measure on SQLite. DuckDB sustains 53,091 metric points/sec, 36,577 spans/sec, and 30,442 log records/sec at batch 100. My early attempts never produced these numbers, the pre-fix backend died before that phase of the ramp could run, so seeing them appear at all was the first sign the reruns were measuring something the crashes had been eating.
+The bottom of each ramp holds one more first for the series: the SDK-fleet shape, hundreds of small batches per second rather than a few fat ones, which post 2 could only measure on SQLite. DuckDB sustains 53,091 metric points/sec, 36,577 spans/sec, and 30,442 log records/sec at batch 100. My early attempts never produced these numbers, the pre-fix backend died before that phase of the ramp could run, so seeing them appear at all was the first sign the reruns were measuring something the crashes had been eating.
 
 ## Reads: every cliff, 100x later
 
 Writes were the appetizer; reads are why anyone reaches for a columnar engine, and they're where I had the most to lose. Post 2's most-quoted line was about read cliffs, the row count where the dashboard stops loading, and if DuckDB only matched SQLite here, the whole build would be a curiosity. Before running it I told myself I'd be satisfied if each signal's cliff moved 10x.
 
-| Rows (actual) | Metrics | Spans | Logs |
+| Fill level | Metrics | Spans | Logs |
 |---|---|---|---|
-| ~1M | 146 ms | 139 ms | 27 ms |
-| ~10M | 382 ms | **902 ms** | **85 ms** |
-| ~100M | **3.0 s, passes** | over 60 s, fails | fails unevenly: body search 3.5 s, trace-id 2 ms, severity filter over 60 s |
-| ~1B | fill succeeds, queries over 60 s | not reached | not reached |
+| 1M | 146 ms | 139 ms | 27 ms |
+| 10M | 382 ms | **902 ms** | **85 ms** |
+| 100M | **3.0 s, passes** | over 60 s, fails | fails unevenly: body search 3.5 s, trace-id 2 ms, severity filter over 60 s |
+| 1B | fill succeeds, queries over 60 s | not reached | not reached |
 
-Each cell is the median of three real endpoint probes after fill and digestion; bold marks each signal's last passing level. I got 100x per signal, not 10x: SQLite's last passing levels were 1M, 100k, and 100k, and all three moved by the same factor of one hundred. Same endpoints, same thresholds.
+Each cell is the median of three real endpoint probes after fill and digestion; bold marks each signal's last passing level. Two footnotes on the table itself. The levels are fill targets and the fills run over: the 1M level actually holds 1.7M rows for spans and logs and 2.6M for metrics, and every level above lands within 16% of target, so the exact row counts are in the JSON. And the over-60-s durations come from a second ladder run with the probe timeout raised to 60 seconds, which gets its own section below; the standard probe gives up at 6 s. I got 100x per signal, not 10x: SQLite's last passing levels were 1M, 100k, and 100k, and all three moved by the same factor of one hundred. Same endpoints, same thresholds.
 
 Metrics reads scale gently: 146 ms at 1M, 382 ms at 10M, 3.0 s at 100M. A hundred times the rows costs twenty times the latency, the scan gets cheaper per row as the table grows. The level SQLite barely passed is a hundredth of the level DuckDB passes with the same margin.
 
-![Per-endpoint read latency vs metric_points table size on log-log axes. All three probes sit under 250 ms at 1M rows, under 700 ms at 10M, and between 2.5 and 5 s at 100M, still under the threshold](/blog/sqlite-vs-duckdb/chart-readprobe-metrics.webp)
+![Per-endpoint read latency vs metric_points table size on log-log axes. All three probes sit under 250 ms at 1M rows, under 700 ms at 10M, and between 2.4 and 5 s at 100M, still under the threshold](/blog/sqlite-vs-duckdb/chart-readprobe-metrics.webp)
 
 Spans pay for their percentiles, same as they did on SQLite, just later. This is the page doing the paying, shown on my local instance with the loadgen's spans:
 
@@ -96,15 +96,15 @@ At their passing levels logs are the fastest dashboard of the three (85 ms media
 
 ## A billion rows on an 80 GB disk
 
-I put the 1B level on the ladder expecting to write a paragraph about how it died, because every earlier attempt at it had ended the same way: container gone, level unreadable. This time the fill ran for 52 minutes, accepted 1,001,472,000 metric points at a sustained 320k points/sec with the gate shedding the excess, and landed them in **10.8 GB on disk**, about 10.8 bytes per point after columnar compression. The box stayed up. Health checks answered the whole way through, and post-fill digestion took 5 seconds. Nothing in posts 1 or 2 gets within 100x of this level; on the fixed backend a billion rows is just a big table.
+I put the 1B level on the ladder expecting to write a paragraph about how it died, because every earlier attempt at it had ended the same way: container gone, level unreadable. This time the final fill step alone ran for 52 minutes, adding its last 900M points at a sustained 287k points/sec with the gate shedding the excess, and brought the table to 1,001,472,000 rows in **10.8 GB on disk**, about 10.8 bytes per point after columnar compression, under an hour of total ingest across the ladder. The box stayed up. Health checks answered the whole way through, and post-fill digestion took 5 seconds. Nothing in posts 1 or 2 gets within 100x of this level; on the fixed backend a billion rows is just a big table.
 
 A big table you cannot look at: all three dashboard queries ran past 60 seconds at 1B, so the level fails, and 5B was never attempted since the ladder stops at the first failure. I left it that way on purpose. A 5B fill would prove the disk holds 54 GB of points, and I already know nothing could read them. The practical summary of the ladder's top: this box can store a billion metric points, and it can show you a hundred million of them.
 
 ## How slow is slow past the cliff
 
-Post 2 could only say "it timed out" about anything past a cliff. This time I reran the entire ladder with a 60-second probe threshold to put real durations on the failing cells, and the durations barely exist: metrics at 1B, still running at 61 s. Spans aggregations at 100M, still running at 61 s. The logs severity filter at 100M, still running at 61 s while the body search finished in 3.2 s beside it.
+Post 2 could only say "it timed out" about anything past a cliff. This time I reran the entire ladder with a 60-second probe threshold to put real durations on the failing cells, and there were no durations to put: every failing query was still running when the new cap cut it off. Metrics at 1B, still running at 61 s. Spans aggregations at 100M, still running at 61 s. The logs severity filter at 100M, still running at 61 s while the body search finished in 3.2 s beside it.
 
-So the cliffs are not slopes on either database. Queries go from a second or three to more than a minute across a single 10x step in rows, the signature of an aggregation outgrowing the 4 GB memory budget and spilling. There is no slow-but-usable band above a cliff to plan around, which post 2 found on SQLite at one hundredth the scale, and which is why I keep publishing cliffs instead of curves.
+So the cliffs are not slopes on either database. Queries go from a second or three to more than a minute across a single 10x step in rows, the signature of an aggregation outgrowing the 4 GB memory budget and spilling. Post 2 found the same absence on SQLite at one hundredth the scale, and it is why I keep publishing cliffs instead of curves: there is no slow-but-usable band above a cliff to plan around.
 
 The 60-second run also caught a smaller flaw for the fix list: a cancelled dashboard query does not promptly release its read-pool connection, so after the two spans aggregations timed out, a 3 ms exceptions query queued behind them for 52 seconds. It affected no passing number, and it goes on the same list the admission gate came from.
 
@@ -126,8 +126,9 @@ Writes were already a non-issue on SQLite for everything except logs, and on Duc
 - **Mixed-signal load.** Each signal had the box to itself; a real deployment writes all three at once and these ceilings do not simply add.
 - **Result correctness.** I timed responses, I did not diff their contents.
 - **Variance.** Single-shot, as admitted in the methodology, with the median-of-three protocol still owed.
-- **Tuning.** Stock config: 4 GB DuckDB memory cap, 256 MB checkpoint threshold, no schema or query changes. The 1B read failure smells like it wants a memory-budget experiment, and that is a deliberate cliffhanger.
-- **Durability over weeks.** A 52-minute billion-row fill says nothing about month three on the same disk.
+- **Tuning.** Stock config, meaning what the benchmark compose file ships by default: 4 GB DuckDB memory cap, 256 MB checkpoint threshold, no schema or query changes. The 1B read failure smells like it wants a memory-budget experiment, and that is a deliberate cliffhanger.
+- **ClickHouse.** The comparison post 2 promised is still owed, and it gets its own post on these same ladders rather than a section squeezed in here.
+- **Durability over weeks.** An hour-long billion-row fill says nothing about month three on the same disk.
 
 ## What surprised me
 
@@ -137,9 +138,9 @@ The other surprise was logs, again. Post 2's verdict was "keep logs off SQLite,"
 
 ## The verdict
 
-Post 1 claimed a $16 box could run your observability stack. Post 2 tested the claim and returned it with an exception: not logs, and mind the read cliffs. This post retires the exception. On the same box, the DuckDB build writes every signal faster than a small fleet emits, serves dashboards at row counts the SQLite build cannot approach, and turns logs from the signal I benched entirely into the best result in the dataset. A billion metric points cost 10.8 GB of disk. I came into the week hoping to double post 2's numbers; the smallest improvement in the table is 3x.
+Post 1 claimed a $16 box could run your observability stack. Post 2 tested the claim and returned it with an exception: not logs, and mind the read cliffs. This post retires the exception. On the same box, the DuckDB build writes every signal faster than a small fleet emits, serves dashboards at row counts the SQLite build cannot approach, and turns logs from the signal post 2 told you to keep off the box into the best result in the dataset. A billion metric points cost 10.8 GB of disk. I came into the week hoping to double post 2's numbers; the smallest improvement in the table is 3x.
 
-So if you self-host Traceway on a single machine, run the DuckDB build ([`docker-compose.duckdb.yml`](https://github.com/tracewayapp/traceway/blob/main/docker-compose.duckdb.yml) in the repo brings it up). I would only reach for the SQLite build in two situations, and both are real. If you need a binary that compiles anywhere Go does, SQLite wins: the DuckDB build needs CGO and glibc, so its container image is Debian rather than Alpine. And if your volume lives comfortably under post 2's numbers, SQLite's storage engine doing all its work inline, no deferred checkpoints, no digestion window, no 503s under burst, remains the simplest thing that works. The moment logs matter, or retention past an hour matters, the comparison stops being close.
+So if you self-host Traceway on a single machine, run the DuckDB build ([`docker-compose.duckdb.yml`](https://github.com/tracewayapp/traceway/blob/main/docker-compose.duckdb.yml) in the repo brings it up). One config note before you do: that compose file ships a conservative 2 GB DuckDB memory cap and leaves the checkpoint threshold at DuckDB's 16 MB default, while the benchmark ran on 4 GB and 256 MB, so set `DUCKDB_MEMORY_LIMIT` and `DUCKDB_CHECKPOINT_THRESHOLD` to match if you want these numbers. I would only reach for the SQLite build in two situations, and both are real. If you need a binary that compiles anywhere Go does, SQLite wins: the DuckDB build needs CGO and glibc, so its container image is Debian rather than Alpine. And if your volume lives comfortably under post 2's numbers, SQLite's storage engine doing all its work inline, no deferred checkpoints, no digestion window to wait out, remains the simplest thing that works. The moment logs matter, or retention past an hour matters, the comparison stops being close.
 
 One asterisk belongs on the whole table: these numbers exist because the benchmark first found a crash bug in my ingest path, and I fixed it before rerunning everything. If you run the DuckDB build, run a version with the admission gate. The engine was never the problem. The code in front of it was, and finding that out is the most useful thing this comparison produced.
 
@@ -147,11 +148,11 @@ One asterisk belongs on the whole table: these numbers exist because the benchma
 
 Everything in this post, runnable from the repo:
 
-- **Raw JSON** lives in [`benchmarks/blog/post-3-data/`](https://github.com/tracewayapp/traceway/tree/main/benchmarks/blog/post-3-data): three throughput JSONs, three read-probe JSONs, and three 60-second diagnostic JSONs.
-- **The workflow**: [`benchmark-hardware.yml`](https://github.com/tracewayapp/traceway/actions/workflows/benchmark-hardware.yml). Throughput run: [29828430297](https://github.com/tracewayapp/traceway/actions/runs/29828430297). Read-probe run: [29838394873](https://github.com/tracewayapp/traceway/actions/runs/29838394873). 60-second diagnostic: [29848976962](https://github.com/tracewayapp/traceway/actions/runs/29848976962). The pre-fix runs the methodology disclosure mentions: [29734966806](https://github.com/tracewayapp/traceway/actions/runs/29734966806) and [29815312404](https://github.com/tracewayapp/traceway/actions/runs/29815312404).
+- **Raw JSON** lives in [`benchmarks/blog/post-3-data/`](https://github.com/tracewayapp/traceway/tree/main/benchmarks/blog/post-3-data): throughput, read-probe, and 60-second diagnostic JSONs, one per signal.
+- **The workflow**: [`benchmark-hardware.yml`](https://github.com/tracewayapp/traceway/actions/workflows/benchmark-hardware.yml). Throughput: [29828430297](https://github.com/tracewayapp/traceway/actions/runs/29828430297). Read-probe: [29838394873](https://github.com/tracewayapp/traceway/actions/runs/29838394873). 60-second diagnostic: [29848976962](https://github.com/tracewayapp/traceway/actions/runs/29848976962). The pre-fix runs the methodology disclosure mentions: [29734966806](https://github.com/tracewayapp/traceway/actions/runs/29734966806) and [29815312404](https://github.com/tracewayapp/traceway/actions/runs/29815312404).
 - **The fix**: commit [`14b4aa6e`](https://github.com/tracewayapp/traceway/commit/14b4aa6e175946d40383d938db22cfea8c23c695), the ingest admission gate.
-- **Try Traceway**: [self-host in five minutes](https://tracewayapp.com/docs/install).
+- **Try Traceway**: [self-host in five minutes](/docs/install).
 
 Questions, pushback, or "your number is wrong because X": `jstojiljkovic941@gmail.com`, or find me on [GitHub](https://github.com/jstojiljkovic).
 
-**Next post:** the one post 2 already promised. Same $16.49/month box, ClickHouse with PostgreSQL in Docker, same loadgen, same signals, same ladder to a billion rows, now with the admission gate protecting every contender equally. Time to find out what the heavyweight buys over the embedded engines.
+**Next post:** the one post 2 promised. ClickHouse on the same box, same loadgen, same ladders, to find out what the full client-server stack buys you over the embedded engines and what it costs to get it.
