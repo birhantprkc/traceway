@@ -67,6 +67,17 @@
 		return PUBLIC_PATHS.has(pathname) || pathname.startsWith('/accept-invitation');
 	}
 
+	// An unauthenticated visit to a protected path matches neither layout
+	// branch below and would render a blank page; send it to login instead,
+	// carrying the original URL so login can return there.
+	$effect(() => {
+		if (!authState.isAuthenticated && !isPublicPath(page.url.pathname)) {
+			const returnTo = page.url.pathname + page.url.search;
+			// eslint-disable-next-line svelte/no-navigation-without-resolve
+			goto(`/login?returnTo=${encodeURIComponent(returnTo)}`, { replaceState: true });
+		}
+	});
+
 	// Track navigation depth for smart back buttons
 	let lastPathname = '';
 	afterNavigate((navigation) => {
@@ -105,6 +116,7 @@
 	});
 
 	onMount(() => {
+		document.getElementById('splash')?.remove();
 		initTheme();
 		(window as any).captureException = captureException;
 
