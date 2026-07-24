@@ -14,7 +14,8 @@
 	import FrameworkIcon from '$lib/components/framework-icon.svelte';
 	import * as Sidebar from '$lib/components/ui/sidebar';
 	import { Button } from '$lib/components/ui/button';
-	import { Sun, Moon, LogOut, Plus, Check, Pencil, TriangleAlert } from '@lucide/svelte';
+	import { Sun, Moon, LogOut, Plus, Check, Pencil } from '@lucide/svelte';
+	import { WarningCallout } from '$lib/components/ui/warning-callout';
 	import { onMount } from 'svelte';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import { ChevronDown } from 'lucide-svelte';
@@ -299,15 +300,13 @@
 			</header>
 			<main class="min-w-0 flex-1 p-4">
 				{#if timezoneMismatch}
-					<div
-						class="mb-4 flex items-start gap-2 rounded-md border border-orange-600/40 bg-orange-500/10 px-3 py-2 text-sm text-orange-700 dark:text-orange-400"
+					<WarningCallout
+						class="mb-4"
+						title="Your browser's timezone differs from the organization's"
 					>
-						<TriangleAlert class="mt-0.5 h-4 w-4 shrink-0" />
-						<span>
-							Your browser's timezone ({zoneLabel(browserZone)}) differs from the organization's
-							({zoneLabel(orgZone)}). All times are shown in the organization's timezone.
-						</span>
-					</div>
+						All times are shown in the organization's timezone ({zoneLabel(orgZone)}). Your
+						browser is on {zoneLabel(browserZone)}.
+					</WarningCallout>
 				{/if}
 				{#if CrossSiteNotificationBanner && bannerOrganizationId !== null}
 					<div class="mb-4">

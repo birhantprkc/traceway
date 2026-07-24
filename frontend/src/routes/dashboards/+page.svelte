@@ -38,10 +38,9 @@
 		Upload,
 		Share2,
 		CircleMinus,
-		TriangleAlert,
 		Search
 	} from 'lucide-svelte';
-	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
+	import { WarningCallout } from '$lib/components/ui/warning-callout';
 	import { ErrorAlert } from '$lib/components/ui/error-alert';
 	import { ErrorDisplay } from '$lib/components/ui/error-display';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -1325,16 +1324,12 @@
 				Choose which projects show "{activeDashboard?.name}" in their dashboard tabs.
 			</AlertDialog.Description>
 		</AlertDialog.Header>
-		<Alert variant="destructive">
-			<TriangleAlert class="h-4 w-4" />
-			<AlertTitle>Shared across projects</AlertTitle>
-			<AlertDescription>
-				This is a single shared dashboard. Checking a project shows it in that project's tabs.
-				Nothing is copied or overwritten, but edits made from any project apply to all of them.
-				Unchecking a project removes the dashboard from its tabs, including any of its widgets
-				starred on that project's homepage.
-			</AlertDescription>
-		</Alert>
+		<WarningCallout title="Shared across projects">
+			This is a single shared dashboard. Checking a project shows it in that project's tabs.
+			Nothing is copied or overwritten, but edits made from any project apply to all of them.
+			Unchecking a project removes the dashboard from its tabs, including any of its widgets
+			starred on that project's homepage.
+		</WarningCallout>
 		<ErrorAlert error={applyError} />
 		<div class="max-h-72 space-y-2 overflow-y-auto">
 			{#each orgProjects as project (project.id)}
@@ -1416,16 +1411,13 @@
 		</AlertDialog.Header>
 		<ErrorAlert error={grafanaError} />
 		{#if grafanaWarnings.length > 0}
-			<div
-				class="max-h-48 space-y-1 overflow-y-auto rounded-md border border-yellow-500/40 bg-yellow-500/5 p-3"
-			>
-				{#each grafanaWarnings as warning}
-					<div class="flex items-start gap-2 text-xs text-muted-foreground">
-						<TriangleAlert class="mt-0.5 h-3.5 w-3.5 shrink-0 text-yellow-500" />
-						<span>{warning}</span>
-					</div>
-				{/each}
-			</div>
+			<WarningCallout title="Imported with warnings">
+				<div class="max-h-48 space-y-1 overflow-y-auto">
+					{#each grafanaWarnings as warning}
+						<div class="text-xs">{warning}</div>
+					{/each}
+				</div>
+			</WarningCallout>
 		{:else}
 			<div class="space-y-2">
 				<textarea
