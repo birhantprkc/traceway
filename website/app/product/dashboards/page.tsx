@@ -90,10 +90,10 @@ export default function DashboardsPage() {
               </>
             }
             bullets={[
-              "Upsert mode matches dashboards by name — safe to re-run",
+              "Upsert mode matches dashboards by name, so re-runs are safe",
               "Import a single dashboard or a whole-organization bundle",
               "Authenticate with a personal access token from CI",
-              "The UI and the API edit the same document — no drift",
+              "The UI and the API edit the same document, so nothing drifts",
             ]}
             image={{
               src: "/images/dashboards-page.png",
@@ -113,7 +113,7 @@ export default function DashboardsPage() {
             description="Dashboards belong to your organization, not to a single project. Apply the same dashboard to any set of projects; a fix made in one is instantly live in all of them. Each project still curates its own homepage by starring the widgets it cares about."
             bullets={[
               "One shared definition, per-project tabs",
-              "Nothing is copied — edits propagate everywhere",
+              "Nothing is copied, and edits propagate everywhere",
               "Per-project starred widgets for the homepage",
               "Unapplying only removes it from that project's tabs",
             ]}
@@ -137,7 +137,7 @@ export default function DashboardsPage() {
             bullets={[
               "Panels and Prometheus queries converted automatically",
               "rate() approximations and skipped panels are called out",
-              "Imported dashboards are normal dashboards — edit freely",
+              "Imported dashboards are normal dashboards you can edit freely",
             ]}
             image={{
               src: "/images/dashboards-grafana-warnings.png",
@@ -222,7 +222,7 @@ export default function DashboardsPage() {
                         <code>/api/dashboards/import</code> with{" "}
                         <code>{`"mode": "upsert"`}</code> and a personal access
                         token. Upsert matches dashboards by name, so the job
-                        is idempotent — re-running it converges every
+                        idempotent. Re-running it converges every
                         environment to the file in your repository.
                       </p>
                     </>
@@ -230,7 +230,7 @@ export default function DashboardsPage() {
                 },
                 {
                   q: "What happens when someone edits a dashboard in the UI?",
-                  a: "The UI edits the exact same JSON document the API serves — there is no separate representation. If you treat your repo as the source of truth, the next CI upsert brings the dashboard back to the committed state; if you prefer UI-first, just export after editing and commit the result.",
+                  a: "The UI edits the exact same JSON document the API serves. There is no separate representation. If you treat your repo as the source of truth, the next CI upsert brings the dashboard back to the committed state; if you prefer UI-first, just export after editing and commit the result.",
                 },
                 {
                   q: "How faithful is the Grafana import?",

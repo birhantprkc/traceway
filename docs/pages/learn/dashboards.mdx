@@ -10,12 +10,12 @@ Each tab on the Dashboards page is one dashboard applied to the current project.
 
 <img src="/dashboards/dashboards-menu.png" alt="Dashboard menu" style={{ maxWidth: '100%', height: 'auto', marginTop: '16px', borderRadius: '8px', border: '1px solid #e5e7eb' }} />
 
-- **Rename Dashboard** — names are unique within the organization
-- **Edit as JSON** — edit the whole dashboard as one document
-- **Export JSON** — download the dashboard for versioning or sharing
-- **Apply to Projects** — choose which projects show this dashboard
-- **Remove from this Project** — unassign it here; it stays available everywhere else
-- **Delete Dashboard** — remove it from every project, permanently
+- **Rename Dashboard**: names are unique within the organization
+- **Edit as JSON**: edit the whole dashboard as one document
+- **Export JSON**: download the dashboard for versioning or sharing
+- **Apply to Projects**: choose which projects show this dashboard
+- **Remove from this Project**: unassign it here; it stays available everywhere else
+- **Delete Dashboard**: remove it from every project, permanently
 
 ## Adding dashboards: the command palette
 
@@ -92,7 +92,7 @@ Paste any Grafana dashboard JSON export and Traceway converts it on a best-effor
 
 <img src="/dashboards/dashboards-grafana-import.png" alt="Grafana import" style={{ maxWidth: '100%', height: 'auto', marginTop: '16px', borderRadius: '8px', border: '1px solid #e5e7eb' }} />
 
-Anything that cannot be converted faithfully is reported instead of silently dropped — `rate()` approximations, unsupported panel types, regex matchers, non-Prometheus queries:
+Anything that cannot be converted faithfully is reported instead of silently dropped: `rate()` approximations, unsupported panel types, regex matchers, non-Prometheus queries.
 
 <img src="/dashboards/dashboards-grafana-warnings.png" alt="Grafana conversion warnings" style={{ maxWidth: '100%', height: 'auto', marginTop: '16px', borderRadius: '8px', border: '1px solid #e5e7eb' }} />
 
