@@ -15,6 +15,7 @@
   "logs": "Logs",
   "alerts": "Alerts",
   "sso": "SSO",
+  "cli": "CLI",
   "cli-auth": "CLI Authentication",
   "mcp": "MCP Server",
   "embedded-mode": "Embedded Mode",
