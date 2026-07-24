@@ -933,6 +933,24 @@
 		}
 		sharedTimeDomain = [new Date(getFromDateTimeUTC()), new Date(getToDateTimeUTC())];
 	});
+
+	// The resolved timezone can flip from the browser zone to the organization
+	// zone once projects finish loading. The wall-clock range state above was
+	// materialized under the old zone; re-resolve the preset under the new one
+	// or every widget query shifts by the offset difference.
+	let lastResolvedTimezone = timezone;
+	$effect(() => {
+		const tz = timezone;
+		if (tz === lastResolvedTimezone) return;
+		lastResolvedTimezone = tz;
+		if (!selectedPreset) return;
+		const range = getTimeRangeFromPreset(selectedPreset, tz);
+		fromDate = dateToCalendarDate(range.from, tz);
+		toDate = dateToCalendarDate(range.to, tz);
+		fromTime = dateToTimeString(range.from, tz);
+		toTime = dateToTimeString(range.to, tz);
+		sharedTimeDomain = [new Date(getFromDateTimeUTC()), new Date(getToDateTimeUTC())];
+	});
 </script>
 
 <svelte:window onkeydown={handlePageKeydown} />

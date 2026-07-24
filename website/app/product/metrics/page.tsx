@@ -93,7 +93,7 @@ export default function MetricsPage() {
             description="Build a dashboard once and apply it across every project in your organization. Each dashboard is a plain JSON document, so you can edit it as code, keep it in your repo, or import the Grafana dashboards you already have."
             bullets={[
               "One dashboard, applied across projects",
-              "Template marketplace: hosts, Docker, Kubernetes, PostgreSQL, Redis",
+              "Template marketplace: OTel host agent, Go runtime, ClickHouse, DuckDB",
               "Import existing Grafana dashboards",
               "Search and add anything with ⌘K",
             ]}

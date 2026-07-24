@@ -6,7 +6,7 @@ Dashboards visualize your metrics as tabs of chart widgets. A dashboard belongs 
 
 ## The Dashboards page
 
-Each tab on the Dashboards page is one dashboard applied to the current project. New projects offer to populate framework-appropriate defaults (host dashboards for OpenTelemetry projects, runtime dashboards for Go and Node.js SDK projects). The active tab's menu holds everything you can do with a dashboard:
+Each tab on the Dashboards page is one dashboard applied to the current project. A project with no dashboards yet shows a single **Browse Dashboards & Templates** button that opens the command palette described below. The active tab's menu holds everything you can do with a dashboard:
 
 <img src="/dashboards/dashboards-menu.png" alt="Dashboard menu" style={{ maxWidth: '100%', height: 'auto', marginTop: '16px', borderRadius: '8px', border: '1px solid #e5e7eb' }} />
 
@@ -33,10 +33,12 @@ Templates are ready-made dashboards you install and then customize freely. The m
 
 | Template | Category | Source of the metrics |
 | --- | --- | --- |
-| Server | server | [Traceway OTel Agent](/learn/otel-agent) host CPU, memory, disk and network metrics |
+| OTelemetry Server Agent | server | [Traceway OTel Agent](/learn/otel-agent) host CPU, memory, disk and network metrics |
 | Go Application | go | Go SDK runtime and process metrics (goroutines, heap, GC, CPU, memory) |
 | Traceway ClickHouse | traceway | A monitored Traceway instance's `traceway.ch.*` metrics |
 | Traceway DuckDB | traceway | A monitored Traceway instance's `traceway.duckdb.*` metrics |
+
+<img src="/dashboards/dashboards-palette-templates.png" alt="Templates in the command palette" style={{ maxWidth: '100%', height: 'auto', marginTop: '16px', borderRadius: '8px', border: '1px solid #e5e7eb' }} />
 
 Widgets can group series by resource tags such as `container.name`, `k8s.pod.name`, `k8s.node.name`, or `postgresql.database.name`, so one widget shows one line per container, pod, node, or database. Point the matching OpenTelemetry Collector receiver at your Traceway project's OTLP endpoint and build widgets on the metrics it reports.
 
