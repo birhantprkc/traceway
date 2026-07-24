@@ -4,14 +4,17 @@
 	import { authState } from '$lib/state/auth.svelte';
 	import { projectsState, type Project } from '$lib/state/projects.svelte';
 	import { themeState, initTheme, toggleTheme } from '$lib/state/theme.svelte';
+	import { getTimezone } from '$lib/state/timezone.svelte';
+	import { DateTime } from 'luxon';
 	import { incrementNavDepth, decrementNavDepth } from '$lib/utils/back-navigation';
 	import AppSidebar from '$lib/components/app-sidebar.svelte';
 	import AddProjectModal from '$lib/components/add-project-modal.svelte';
 	import EditProjectModal from '$lib/components/edit-project-modal.svelte';
+	import DashboardCommand from '$lib/components/dashboard/dashboard-command.svelte';
 	import FrameworkIcon from '$lib/components/framework-icon.svelte';
 	import * as Sidebar from '$lib/components/ui/sidebar';
 	import { Button } from '$lib/components/ui/button';
-	import { Sun, Moon, LogOut, Plus, Check, Pencil } from '@lucide/svelte';
+	import { Sun, Moon, LogOut, Plus, Check, Pencil, TriangleAlert } from '@lucide/svelte';
 	import { onMount } from 'svelte';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import { ChevronDown } from 'lucide-svelte';
@@ -31,12 +34,45 @@
 	let { children } = $props();
 	let showAddProjectModal = $state(false);
 	let showEditProjectModal = $state(false);
+	let showCommandPalette = $state(false);
+
+	const isMacPlatform = typeof navigator !== 'undefined' && /Mac|iP(hone|ad|od)/.test(navigator.platform);
+
+	function handleGlobalKeydown(e: KeyboardEvent) {
+		if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+			if (!authState.isAuthenticated || isPublicPath(page.url.pathname)) return;
+			if (isMacPlatform && !e.metaKey) return;
+			if (page.url.pathname === '/dashboards') return;
+			e.preventDefault();
+			showCommandPalette = !showCommandPalette;
+		}
+	}
 
 	const SIDEBAR_OPEN_KEY = 'traceway_sidebar_open';
 	let sidebarOpen = $state(localStorage.getItem(SIDEBAR_OPEN_KEY) !== 'false');
 	let CrossSiteNotificationBanner = $state<Component<{ organizationId: number }> | null>(null);
 
 	const bannerOrganizationId = $derived(projectsState.currentProject?.organizationId ?? null);
+
+	// Warn when the browser's timezone renders times differently from the
+	// organization's timezone (all timestamps are shown in the org timezone).
+	// Compare offsets, not zone names — Europe/Berlin vs Europe/Belgrade is
+	// not a mismatch worth warning about.
+	const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+	const orgZone = $derived(getTimezone());
+	const timezoneMismatch = $derived.by(() => {
+		if (!orgZone || orgZone === browserZone) return false;
+		const now = Date.now();
+		return (
+			DateTime.fromMillis(now, { zone: orgZone }).offset !==
+			DateTime.fromMillis(now, { zone: browserZone }).offset
+		);
+	});
+
+	function zoneLabel(zone: string): string {
+		if (zone === 'UTC') return 'UTC';
+		return `${zone}, UTC${DateTime.now().setZone(zone).toFormat('Z')}`;
+	}
 
 	const PUBLIC_PATHS = new Set([
 		'/login',
@@ -166,6 +202,8 @@
 
 <svelte:head><title>Traceway</title></svelte:head>
 
+<svelte:window onkeydown={handleGlobalKeydown} />
+
 {#snippet projectItem(project: Project, indent: boolean)}
 	<DropdownMenu.Item
 		onclick={() => handleProjectSelect(project.id)}
@@ -260,6 +298,17 @@
 				</div>
 			</header>
 			<main class="min-w-0 flex-1 p-4">
+				{#if timezoneMismatch}
+					<div
+						class="mb-4 flex items-start gap-2 rounded-md border border-orange-600/40 bg-orange-500/10 px-3 py-2 text-sm text-orange-700 dark:text-orange-400"
+					>
+						<TriangleAlert class="mt-0.5 h-4 w-4 shrink-0" />
+						<span>
+							Your browser's timezone ({zoneLabel(browserZone)}) differs from the organization's
+							({zoneLabel(orgZone)}). All times are shown in the organization's timezone.
+						</span>
+					</div>
+				{/if}
 				{#if CrossSiteNotificationBanner && bannerOrganizationId !== null}
 					<div class="mb-4">
 						<CrossSiteNotificationBanner organizationId={bannerOrganizationId} />
@@ -281,6 +330,8 @@
 		onOpenChange={(open) => (showEditProjectModal = open)}
 		project={projectsState.currentProject}
 	/>
+
+	<DashboardCommand bind:open={showCommandPalette} />
 
 	<Toaster position="bottom-right" />
 {:else}

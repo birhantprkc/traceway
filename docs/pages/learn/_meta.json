@@ -12,6 +12,7 @@
   "spans": "Spans",
   "healthchecks": "Healthchecks",
   "metrics": "Metrics",
+  "dashboards": "Dashboards",
   "logs": "Logs",
   "alerts": "Alerts",
   "sso": "SSO",
