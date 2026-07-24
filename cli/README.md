@@ -37,7 +37,7 @@ Check an installed binary with `traceway version` (or `traceway --version`). Sou
 # 1. log in (creates ~/.config/traceway/config.json + ~/.local/state/traceway/state.json)
 #    Default: browser device login — prints a URL + short code, you approve in the
 #    browser, and the CLI receives a token that auto-refreshes.
-traceway login --url https://cloud.traceway.com
+traceway login --url https://cloud.tracewayapp.com
 
 # 2. pick a project (one-time; future calls use it implicitly)
 traceway projects list
