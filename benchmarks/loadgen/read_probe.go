@@ -27,7 +27,14 @@ type readProbeStep struct {
 	// DroppedRows is cumulative since scenario start, mirroring RowsIngested.
 	// Nonzero means the SUT silently discarded rows during fill, so the true
 	// table size is RowsIngested minus DroppedRows.
-	DroppedRows     int64                 `json:"droppedRows,omitempty"`
+	DroppedRows int64 `json:"droppedRows,omitempty"`
+	// DigestSeconds is how long the SUT's engine needed after the fill before
+	// its db+WAL file sizes went stable (the WAL-checkpoint gate). Probes run
+	// after this wait, so latencies measure steady-state query cost, not a
+	// mid-checkpoint wedge. DigestTimedOut means the cap expired first and
+	// the probes ran against a possibly still-digesting engine.
+	DigestSeconds   float64               `json:"digestSeconds,omitempty"`
+	DigestTimedOut  bool                  `json:"digestTimedOut,omitempty"`
 	Probes          []endpointProbeResult `json:"probes"`
 	MedianLatencyMs float64               `json:"medianLatencyMs"`
 	// Back-compat: equals MedianLatencyMs and AND-of-all-probe-Ok respectively.
@@ -82,12 +89,18 @@ func runReadProbe(ctx context.Context, cfg config, ing *ingester, ingestStats *l
 		res.ReadPath = endpoints[0].Path
 	}
 
+	// The shared client carries a 30s Timeout that would silently cap probes
+	// below a raised --read-threshold-ms; probes get their own client so the
+	// per-probe context (threshold + 1s) is the only deadline.
+	probeClient := &http.Client{Transport: client.Transport}
+
 	ing.SetBatchSize(cfg.fillBatchSize)
 	ing.SetRequestRate(cfg.fillRequestRate)
 
 	// Reset the ingester counters before starting so totalIngested reflects
 	// only what this scenario sent.
 	ing.SnapshotAndResetItems()
+	ing.SnapshotAndResetOkItems()
 	ingestStats.SnapshotAndReset()
 
 	_, sutStatsBase := fetchDeepHealth(ctx, cfg, client)
@@ -110,8 +123,7 @@ func runReadProbe(ctx context.Context, cfg config, ing *ingester, ingestStats *l
 		step.RowsIngested = totalIngested
 
 		// Drain whatever bumped between Stop and Snapshot.
-		extraAttempted, _ := ing.SnapshotAndResetItems()
-		totalIngested += extraAttempted
+		totalIngested += ing.SnapshotAndResetOkItems()
 		step.RowsIngested = totalIngested
 
 		if sutStatsBase.Reachable {
@@ -123,8 +135,17 @@ func runReadProbe(ctx context.Context, cfg config, ing *ingester, ingestStats *l
 			}
 		}
 
-		fmt.Fprintf(stderrPrefix(), "read-probe fill=%d rows reached in %.1fs (signal=%s) — settling %ds\n",
-			step.RowsIngested, step.IngestSecondsElapsed, cfg.signal, res.SettleSeconds)
+		step.DigestSeconds, step.DigestTimedOut = waitForIngestDigestion(ctx, cfg, client.Transport)
+		if step.DigestTimedOut {
+			fmt.Fprintf(stderrPrefix(), "read-probe: engine still digesting after %.0fs cap — probing anyway\n", step.DigestSeconds)
+		}
+		// ClickHouse's post-ingest work is merges rather than a WAL
+		// checkpoint; give it the same courtesy before probing. Skips
+		// instantly on backends where CH isn't reachable.
+		waitForMergesIdle(ctx, cfg, client, fmt.Sprintf("fill %d -> probe", target))
+
+		fmt.Fprintf(stderrPrefix(), "read-probe fill=%d rows reached in %.1fs (signal=%s) — digested in %.1fs, settling %ds\n",
+			step.RowsIngested, step.IngestSecondsElapsed, cfg.signal, step.DigestSeconds, res.SettleSeconds)
 
 		select {
 		case <-time.After(cfg.settleSeconds):
@@ -142,7 +163,7 @@ func runReadProbe(ctx context.Context, cfg config, ing *ingester, ingestStats *l
 		allOk := true
 		latencies := make([]float64, 0, len(endpoints))
 		for _, ep := range endpoints {
-			latency, err := probeReadEndpoint(ctx, client, cfg, ep)
+			latency, err := probeReadEndpoint(ctx, probeClient, cfg, ep)
 			pr := endpointProbeResult{
 				Name:      ep.Name,
 				Path:      ep.Path,
@@ -195,10 +216,12 @@ func runReadProbe(ctx context.Context, cfg config, ing *ingester, ingestStats *l
 	return res
 }
 
-// pollFillProgress drains attempted-item counters from the ingester until the
-// target is reached or the context cancels. Sub-second polling keeps overshoot
-// small (at fill-batch=8192 × 100 req/s the loadgen sends ~800k items/sec, so
-// 200ms granularity overshoots by ≤160k items — negligible at 100M fill).
+// pollFillProgress drains confirmed-item counters from the ingester until the
+// target is reached or the context cancels. Counting only 2xx-confirmed items
+// (not attempts) keeps the fill honest when the SUT sheds load with 503s.
+// Sub-second polling keeps overshoot small (at fill-batch=8192 × 100 req/s
+// the loadgen sends ~800k items/sec, so 200ms granularity overshoots by
+// ≤160k items — negligible at 100M fill).
 func pollFillProgress(ctx context.Context, ing *ingester, totalIngested *int64, target int64) {
 	tick := time.NewTicker(200 * time.Millisecond)
 	defer tick.Stop()
@@ -207,8 +230,7 @@ func pollFillProgress(ctx context.Context, ing *ingester, totalIngested *int64, 
 		case <-ctx.Done():
 			return
 		case <-tick.C:
-			attempted, _ := ing.SnapshotAndResetItems()
-			*totalIngested += attempted
+			*totalIngested += ing.SnapshotAndResetOkItems()
 		}
 	}
 }
@@ -259,6 +281,53 @@ func endpointSetForSignal(signal string) []readProbeEndpoint {
 		}
 	}
 	return nil
+}
+
+// waitForIngestDigestion blocks until the SUT's storage engine has absorbed
+// the fill burst, or cfg.maxDigestWait expires. DuckDB checkpoints the WAL
+// asynchronously after ingest stops; probing mid-checkpoint on a small box
+// measures a wedged engine, not query cost — the symptom is sub-millisecond
+// queries timing out uniformly. /api/health/deep is the canary: on DuckDB it
+// executes real engine queries, so it only answers promptly when a dashboard
+// query would too. "Digested" means two consecutive successful polls, 5s
+// apart, reporting identical db+WAL file sizes. Backends without engine
+// gauges (SQLite, ClickHouse) return on the first successful poll, keeping
+// their timing behavior identical to before this gate existed. Returns the
+// seconds waited and whether the cap expired first.
+func waitForIngestDigestion(ctx context.Context, cfg config, transport http.RoundTripper) (float64, bool) {
+	if cfg.maxDigestWait <= 0 {
+		return 0, false
+	}
+	pollClient := &http.Client{Timeout: 5 * time.Second, Transport: transport}
+	start := time.Now()
+	deadline := start.Add(cfg.maxDigestWait)
+	var prev *ingestStatsSnapshot
+	for time.Now().Before(deadline) {
+		if ctx.Err() != nil {
+			return time.Since(start).Seconds(), false
+		}
+		_, cur := fetchDeepHealth(ctx, cfg, pollClient)
+		if cur.Reachable {
+			if cur.DBSizeBytes == 0 && cur.WALSizeBytes == 0 {
+				return time.Since(start).Seconds(), false
+			}
+			if prev != nil && prev.DBSizeBytes == cur.DBSizeBytes && prev.WALSizeBytes == cur.WALSizeBytes {
+				return time.Since(start).Seconds(), false
+			}
+			snap := cur
+			prev = &snap
+		} else {
+			// A slow or failed poll is the engine (or the box) not answering —
+			// it breaks the stability streak rather than counting toward it.
+			prev = nil
+		}
+		select {
+		case <-time.After(5 * time.Second):
+		case <-ctx.Done():
+			return time.Since(start).Seconds(), false
+		}
+	}
+	return time.Since(start).Seconds(), true
 }
 
 // probeReadEndpoint issues one HTTP request for the given endpoint and returns

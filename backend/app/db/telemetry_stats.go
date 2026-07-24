@@ -37,7 +37,22 @@ var (
 	telemetryIngestMu       sync.Mutex
 	telemetryDroppedRows    = map[string]uint64{}
 	telemetryInsertFailures uint64
+	telemetryIngestRejects  uint64
 )
+
+// RecordIngestRejected counts requests turned away by the ingest admission
+// gate (503). Rejects are load shedding, not data loss — the client retries.
+func RecordIngestRejected() {
+	telemetryIngestMu.Lock()
+	telemetryIngestRejects++
+	telemetryIngestMu.Unlock()
+}
+
+func GetIngestRejects() uint64 {
+	telemetryIngestMu.Lock()
+	defer telemetryIngestMu.Unlock()
+	return telemetryIngestRejects
+}
 
 func RecordTelemetryRowDropped(table string) {
 	telemetryIngestMu.Lock()

@@ -107,6 +107,21 @@ if [[ "${SCENARIO}" == "read-probe" ]]; then
     if [[ -n "${BENCH_FILL_LEVELS:-}" ]]; then
         extra_args+=( --fill-levels "${BENCH_FILL_LEVELS}" )
     fi
+    # Diagnostic threshold override (e.g. 60000). The probe timeout is
+    # threshold + 1s, so raising this reveals how long a slow query actually
+    # takes instead of truncating it at the default 6s. Headline runs keep
+    # the 5000 default so results stay comparable across the series.
+    if [[ -n "${BENCH_READ_THRESHOLD_MS:-}" ]]; then
+        extra_args+=( --read-threshold-ms "${BENCH_READ_THRESHOLD_MS}" )
+    fi
+fi
+
+# Throughput Phase 2 ladder override (e.g. 1,5,10,15,20,25). The default
+# 5-to-25 jump can skip straight from a passing step to one that kills the
+# SUT, and post-fail bisection needs a live SUT — a finer ramp pins the
+# cliff from the passing side instead. Loadgen ignores it outside throughput.
+if [[ "${SCENARIO}" == "throughput" && -n "${BENCH_PHASE2_REQUEST_RATES:-}" ]]; then
+    extra_args+=( --phase2-request-rates "${BENCH_PHASE2_REQUEST_RATES}" )
 fi
 
 # SQLite and DuckDB have no merge-idle equivalent — /health/deep returns

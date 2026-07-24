@@ -40,6 +40,7 @@ type config struct {
 	fillLevels         []int64
 	readThresholdMs    int
 	settleSeconds      time.Duration
+	maxDigestWait      time.Duration
 	fillBatchSize      int
 	fillRequestRate    float64
 	reportOut          string
@@ -81,6 +82,7 @@ func main() {
 	flag.StringVar(&fillLevelsStr, "fill-levels", "100000,1000000,10000000,100000000", "Comma-separated row counts to fill before probing a read (read-probe scenario)")
 	flag.IntVar(&cfg.readThresholdMs, "read-threshold-ms", 5000, "Read latency threshold in ms; step fails if a probe exceeds it (read-probe scenario)")
 	flag.DurationVar(&cfg.settleSeconds, "settle-seconds", 10*time.Second, "Wait between finishing ingest and probing the read (read-probe scenario)")
+	flag.DurationVar(&cfg.maxDigestWait, "max-digest-wait", 10*time.Minute, "After each read-probe fill, poll /api/health/deep until the engine's db+WAL file sizes are stable across two consecutive polls (DuckDB checkpoints the WAL after ingest stops; probing mid-checkpoint measures a wedged engine, not query cost). Cap on that wait; 0 disables. No-op on backends without engine gauges (SQLite, ClickHouse).")
 	flag.IntVar(&cfg.fillBatchSize, "fill-batch-size", 8192, "OTLP batch size used during the fill phase (read-probe scenario)")
 	flag.Float64Var(&cfg.fillRequestRate, "fill-request-rate", 100, "OTLP request rate (req/sec) during the fill phase (read-probe scenario)")
 	flag.StringVar(&cfg.reportOut, "report-out", "", "Path to write JSON results (required)")

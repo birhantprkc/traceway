@@ -35,6 +35,7 @@ type HealthDeepResponse struct {
 	DroppedRows      map[string]uint64        `json:"droppedRows"`
 	DroppedRowsTotal uint64                   `json:"droppedRowsTotal"`
 	InsertFailures   uint64                   `json:"insertFailures"`
+	IngestRejected   uint64                   `json:"ingestRejected"`
 	Engine           *db.TelemetryEngineStats `json:"engine,omitempty"`
 }
 
@@ -49,6 +50,7 @@ func (h healthDeepController) Get(c *gin.Context) {
 	resp.DroppedRows = dropped
 	resp.DroppedRowsTotal = droppedTotal
 	resp.InsertFailures = insertFailures
+	resp.IngestRejected = db.GetIngestRejects()
 	if engine, ok := db.GetTelemetryEngineStats(c.Request.Context()); ok {
 		resp.Engine = &engine
 	}
