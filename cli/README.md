@@ -4,7 +4,13 @@ A Go CLI for the [Traceway](https://github.com/tracewayapp/traceway) observabili
 
 ## Install
 
-Prebuilt binaries are published with every release at
+One-line install for macOS and Linux (runs [`install.sh`](install.sh): detects OS/arch, downloads the latest release, verifies its sha256, installs to `/usr/local/bin` or `~/.local/bin` — no sudo; `TRACEWAY_CLI_VERSION` pins a version, `TRACEWAY_INSTALL_DIR` overrides the target):
+
+```bash
+curl -fsSL https://cli.tracewayapp.com/install.sh | sh
+```
+
+Or install manually: prebuilt binaries are published with every release at
 [github.com/tracewayapp/traceway/releases](https://github.com/tracewayapp/traceway/releases)
 under the matching `CLI vX.Y.Z` tag — the CLI version tracks the backend release.
 Download the archive for your platform (`traceway_<version>_<os>_<arch>.tar.gz`,
