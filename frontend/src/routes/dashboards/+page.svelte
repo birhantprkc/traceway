@@ -13,7 +13,7 @@
 	import { replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import { api } from '$lib/api';
-	import { projectsState, FRAMEWORK_LABELS, type Framework } from '$lib/state/projects.svelte';
+	import { projectsState } from '$lib/state/projects.svelte';
 	import { getTimezone } from '$lib/state/timezone.svelte';
 	import { toUTCISO, calendarDateTimeToLuxon, formatDateTime } from '$lib/utils/formatters';
 	import { TimeRangePicker } from '$lib/components/ui/time-range-picker';
@@ -33,16 +33,15 @@
 		Check,
 		RefreshCw,
 		EllipsisVertical,
-		Sparkles,
 		Braces,
 		Download,
 		Upload,
-		FolderInput,
 		Share2,
 		CircleMinus,
 		TriangleAlert,
 		Search
 	} from 'lucide-svelte';
+	import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert';
 	import { ErrorAlert } from '$lib/components/ui/error-alert';
 	import { ErrorDisplay } from '$lib/components/ui/error-display';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -74,9 +73,6 @@
 	};
 
 	let dashboards = $state<Dashboard[]>([]);
-	let projectFramework = $state<Framework | ''>('');
-	let canPopulateDefaults = $state(false);
-	let populating = $state(false);
 	let loading = $state(true);
 	let listError = $state('');
 	let activeTabId = $state<string>('');
@@ -233,8 +229,6 @@
 				projectId: projectsState.currentProjectId ?? undefined
 			});
 			dashboards = response.dashboards || [];
-			projectFramework = (response.framework as Framework) || '';
-			canPopulateDefaults = !!response.canPopulateDefaults;
 			if (dashboards.length > 0 && !dashboards.some((d) => String(d.id) === activeTabId)) {
 				activeTabId = String(dashboards[0].id);
 			}
@@ -245,31 +239,6 @@
 			loading = false;
 		}
 	}
-
-	async function populateDefaults() {
-		populating = true;
-		try {
-			await api.post(
-				'/dashboards/populate-defaults',
-				{},
-				{ projectId: projectsState.currentProjectId ?? undefined }
-			);
-			toast.success('Successfully populated default dashboards', { position: 'top-center' });
-			await loadDashboards();
-		} catch (e: any) {
-			if (e?.status !== 403) {
-				toast.error(e?.message || 'Failed to populate default dashboards', {
-					position: 'top-center'
-				});
-			}
-		} finally {
-			populating = false;
-		}
-	}
-
-	const frameworkLabel = $derived(
-		projectFramework ? (FRAMEWORK_LABELS[projectFramework] ?? projectFramework) : ''
-	);
 
 	let loadSeq = 0;
 
@@ -971,6 +940,7 @@
 <div class="space-y-4">
 	<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 		<h2 class="text-3xl font-semibold tracking-tight">Dashboards</h2>
+		{#if dashboards.length > 0}
 		<div class="flex items-center gap-2">
 			<button
 				class="inline-flex h-9 items-center gap-2 rounded-md border border-input bg-background px-3 text-sm text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground sm:w-64"
@@ -993,6 +963,7 @@
 				onApply={handleTimeRangeChange}
 			/>
 		</div>
+		{/if}
 	</div>
 
 	{#if loading}
@@ -1009,34 +980,10 @@
 	{:else if dashboards.length === 0}
 		<div class="flex flex-col items-center justify-center rounded-md bg-muted py-20 text-center">
 			<p class="mb-4 text-muted-foreground">No dashboards yet.</p>
-			<div class="flex flex-wrap items-center justify-center gap-2">
-				{#if canPopulateDefaults}
-					<Button onclick={populateDefaults} disabled={populating}>
-						<Sparkles class="mr-1 h-4 w-4" />
-						{populating
-							? 'Populating...'
-							: frameworkLabel
-								? `Populate default dashboards for ${frameworkLabel}`
-								: 'Populate default dashboards'}
-					</Button>
-				{/if}
-				<Button variant="success" onclick={() => (showCreateDialog = true)}>
-					<Plus class="mr-1 h-4 w-4" />
-					Create your own Dashboard
-				</Button>
-				<Button variant="outline" onclick={() => (showPalette = true)}>
-					<Search class="mr-1 h-4 w-4" />
-					Browse Dashboards & Templates
-				</Button>
-				<Button variant="outline" onclick={() => (showImportDialog = true)}>
-					<Upload class="mr-1 h-4 w-4" />
-					Import JSON
-				</Button>
-				<Button variant="outline" onclick={() => (showGrafanaDialog = true)}>
-					<FolderInput class="mr-1 h-4 w-4" />
-					Import from Grafana
-				</Button>
-			</div>
+			<Button onclick={() => (showPalette = true)}>
+				<Search class="mr-1 h-4 w-4" />
+				Browse Dashboards & Templates
+			</Button>
 		</div>
 	{:else}
 		<Tabs.Root value={activeTabId} onValueChange={handleTabChange}>
@@ -1357,10 +1304,19 @@
 		<AlertDialog.Header>
 			<AlertDialog.Title>Apply to Projects</AlertDialog.Title>
 			<AlertDialog.Description>
-				Choose which projects show "{activeDashboard?.name}". Unchecking a project removes the
-				dashboard from its tabs.
+				Choose which projects show "{activeDashboard?.name}" in their dashboard tabs.
 			</AlertDialog.Description>
 		</AlertDialog.Header>
+		<Alert variant="destructive">
+			<TriangleAlert class="h-4 w-4" />
+			<AlertTitle>Shared across projects</AlertTitle>
+			<AlertDescription>
+				This is a single shared dashboard. Checking a project shows it in that project's tabs.
+				Nothing is copied or overwritten, but edits made from any project apply to all of them.
+				Unchecking a project removes the dashboard from its tabs, including any of its widgets
+				starred on that project's homepage.
+			</AlertDescription>
+		</Alert>
 		<ErrorAlert error={applyError} />
 		<div class="max-h-72 space-y-2 overflow-y-auto">
 			{#each orgProjects as project (project.id)}
