@@ -77,6 +77,19 @@ The shape mirrors what's useful for the dashboard's aggregations on that entity.
 ### Endpoints
 Identified by HTTP method + route template (`GET /api/users/:id`). Ranked by **Impact** — a composite of Apdex, error rate, P99, client-error rate, and volume-weighted error rate. Streaming responses (SSE / WebSocket) are flagged and excluded from latency-based components.
 
+#### Unmatched requests (404s)
+
+Requests that return 404 without matching any route are grouped under a single `UNMATCHED` endpoint. This keeps scanner and bot traffic from creating one endpoint row per probed path, and `UNMATCHED` is excluded from client-error impact scoring.
+
+On the OTel ingestion path, a 404 from a matched route keeps its route identity. If your `GET /users/:id` handler deliberately returns 404 for a missing user, it stays grouped under `GET /users/:id`. A request only becomes `UNMATCHED` when:
+
+- the span carries no valid `http.route` attribute, meaning the framework matched no route, or
+- `http.route` is a catch-all made only of slashes and wildcards, such as `/`, `/*`, `/**`, or `*/*`. Some instrumentations report these for unmatched requests: Express reports `/` when only app-level middleware ran, and Spring reports `/**` for its static resource handler.
+
+Scoped wildcards like `GET /api/*` are real routes and keep their name even on 404.
+
+This route check only exists for OTel ingestion. The legacy `/api/report` path has no route information on the wire, so it groups every 404 under `UNMATCHED`.
+
 ### Tasks
 Identified by a task name (job class, scheduled command, agent operation). Ranked by count × (P95 − P50) as a rough impact proxy. CONSUMER spans from any queue driver (database, Redis, SQS, Beanstalk, …) land here, as do root `console.command` spans.
 
