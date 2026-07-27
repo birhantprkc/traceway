@@ -91,6 +91,8 @@
 	// page offsets stay stable while the wall clock moves.
 	let lastFromISO = '';
 	let lastToISO = '';
+	let lastFilterBody: ReturnType<typeof currentFilterBody> | null = null;
+	let requestGen = 0;
 
 	// Windowed rendering: only rows near the viewport are mounted, spacer rows
 	// keep the scrollbar honest. Row height is measured from the first rendered
@@ -149,7 +151,7 @@
 		if (expandedId) {
 			const main = scrollEl.querySelector(`tr[data-log-id="${CSS.escape(expandedId)}"]`);
 			const expanded = main?.nextElementSibling as HTMLElement | null;
-			expandedHeight = expanded?.offsetHeight ?? 0;
+			if (expanded) expandedHeight = expanded.offsetHeight;
 		} else {
 			expandedHeight = 0;
 		}
@@ -493,6 +495,7 @@
 	}
 
 	async function loadData(pushToHistory = true) {
+		const gen = ++requestGen;
 		loading = true;
 		error = '';
 		loadMoreError = '';
@@ -511,33 +514,37 @@
 		try {
 			lastFromISO = getFromDateTimeUTC();
 			lastToISO = getToDateTimeUTC();
+			lastFilterBody = currentFilterBody();
 			const requestBody = {
 				fromDate: lastFromISO,
 				toDate: lastToISO,
 				orderBy: sortField,
 				sortDirection,
 				pagination: { page: 1, pageSize },
-				...currentFilterBody()
+				...lastFilterBody
 			};
 
 			const response = (await api.post('/logs', requestBody, {
 				projectId: projectsState.currentProjectId ?? undefined
 			})) as LogsResponse;
 
+			if (gen !== requestGen) return;
 			logs = response.data || [];
 			total = response.pagination.total;
 			scrollEl?.scrollTo({ top: 0 });
 			scrollTop = 0;
 		} catch (e: any) {
+			if (gen !== requestGen) return;
 			console.error(e);
 			error = e.message || 'Failed to load logs';
 		} finally {
-			loading = false;
+			if (gen === requestGen) loading = false;
 		}
 	}
 
 	async function loadMore() {
 		if (loadingMore || loading) return;
+		const gen = requestGen;
 		loadingMore = true;
 		loadMoreError = '';
 		try {
@@ -547,13 +554,14 @@
 				orderBy: sortField,
 				sortDirection,
 				pagination: { page: loadedPages + 1, pageSize },
-				...currentFilterBody()
+				...(lastFilterBody ?? currentFilterBody())
 			};
 
 			const response = (await api.post('/logs', requestBody, {
 				projectId: projectsState.currentProjectId ?? undefined
 			})) as LogsResponse;
 
+			if (gen !== requestGen) return;
 			// Live-prepended rows shift page offsets, so drop anything already loaded.
 			const seen = new Set(logs.map((l) => l.id));
 			const fresh = (response.data || []).filter((l) => !seen.has(l.id));
@@ -569,7 +577,8 @@
 	}
 
 	async function livePoll() {
-		if (pollBusy || loading) return;
+		if (pollBusy || loading || document.hidden) return;
+		const gen = requestGen;
 		pollBusy = true;
 		try {
 			const nowMs = Date.now();
@@ -581,11 +590,12 @@
 					orderBy: 'timestamp',
 					sortDirection: 'desc',
 					pagination: { page: 1, pageSize },
-					...currentFilterBody()
+					...(lastFilterBody ?? currentFilterBody())
 				},
 				{ projectId: projectsState.currentProjectId ?? undefined }
 			)) as LogsResponse;
 
+			if (gen !== requestGen) return;
 			const seen = new Set(logs.map((l) => l.id));
 			const fresh = (response.data || []).filter((l) => !seen.has(l.id));
 			if (fresh.length > 0) {
