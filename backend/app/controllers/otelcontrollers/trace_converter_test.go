@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/tracewayapp/traceway/backend/app/controllers/clientcontrollers"
@@ -261,6 +262,64 @@ func TestGetHTTPEndpoint(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := getHTTPEndpoint(tt.attrs, tt.fallback); got != tt.want {
 				t.Errorf("getHTTPEndpoint() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBuildEndpoint404Unmatched(t *testing.T) {
+	tests := []struct {
+		name  string
+		attrs []*commonpb.KeyValue
+		want  string
+	}{
+		{"matched route keeps identity on 404", []*commonpb.KeyValue{
+			strKV("http.request.method", "GET"),
+			strKV("http.route", "/users/:id"),
+			intKV("http.response.status_code", 404),
+		}, "GET /users/:id"},
+		{"no route collapses on 404", []*commonpb.KeyValue{
+			strKV("http.request.method", "GET"),
+			strKV("url.path", "/wp-admin.php"),
+			intKV("http.response.status_code", 404),
+		}, "UNMATCHED"},
+		{"invalid route collapses on 404", []*commonpb.KeyValue{
+			strKV("http.request.method", "GET"),
+			strKV("http.route", "no-slash"),
+			intKV("http.response.status_code", 404),
+		}, "UNMATCHED"},
+		{"express middleware root route collapses on 404", []*commonpb.KeyValue{
+			strKV("http.request.method", "GET"),
+			strKV("http.route", "/"),
+			intKV("http.response.status_code", 404),
+		}, "UNMATCHED"},
+		{"wildcard route collapses on 404", []*commonpb.KeyValue{
+			strKV("http.request.method", "GET"),
+			strKV("http.route", "/*"),
+			intKV("http.response.status_code", 404),
+		}, "UNMATCHED"},
+		{"spring resource handler route collapses on 404", []*commonpb.KeyValue{
+			strKV("http.request.method", "GET"),
+			strKV("http.route", "/**"),
+			intKV("http.response.status_code", 404),
+		}, "UNMATCHED"},
+		{"scoped wildcard route kept on 404", []*commonpb.KeyValue{
+			strKV("http.request.method", "GET"),
+			strKV("http.route", "/api/*"),
+			intKV("http.response.status_code", 404),
+		}, "GET /api/*"},
+		{"matched route on 200 unaffected", []*commonpb.KeyValue{
+			strKV("http.request.method", "GET"),
+			strKV("http.route", "/users/:id"),
+			intKV("http.response.status_code", 200),
+		}, "GET /users/:id"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			span := &tracepb.Span{Name: "fallback"}
+			ep := buildEndpoint(uuid.New(), testProjectId, span, tt.attrs, nil, time.Time{}, 0, "", "")
+			if ep.Endpoint != tt.want {
+				t.Errorf("buildEndpoint().Endpoint = %q, want %q", ep.Endpoint, tt.want)
 			}
 		})
 	}
@@ -665,6 +724,13 @@ func strKV(key, val string) *commonpb.KeyValue {
 	return &commonpb.KeyValue{
 		Key:   key,
 		Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_StringValue{StringValue: val}},
+	}
+}
+
+func intKV(key string, val int64) *commonpb.KeyValue {
+	return &commonpb.KeyValue{
+		Key:   key,
+		Value: &commonpb.AnyValue{Value: &commonpb.AnyValue_IntValue{IntValue: val}},
 	}
 }
 

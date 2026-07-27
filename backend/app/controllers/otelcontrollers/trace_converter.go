@@ -366,7 +366,13 @@ func buildEndpoint(
 		statusCode = int16(code)
 	}
 
-	if statusCode == 404 {
+	// A 404 collapses to UNMATCHED only when no real route matched: http.route
+	// is missing/invalid, or a catch-all made of only slashes and wildcards
+	// ("/", "/*", "/**", "*/*") — what Express middleware, Spring resource
+	// handlers and not-found handlers report for unmatched requests. A concrete
+	// matched route returning 404 is a deliberate response and keeps its identity.
+	route := getStringAttribute(attrs, "http.route")
+	if statusCode == 404 && (!strings.HasPrefix(route, "/") || strings.Trim(route, "/*") == "") {
 		endpoint = "UNMATCHED"
 	}
 
