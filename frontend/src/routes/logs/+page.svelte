@@ -674,6 +674,9 @@
 	function handlePopState() {
 		const urlParams = parseLogsUrlParams();
 		const range = getResolvedTimeRange(urlParams, timezone);
+		const storedSort = getSortState(SORT_STORAGE_KEY, { field: 'timestamp', direction: 'desc' });
+		sortField = storedSort.field;
+		sortDirection = storedSort.direction;
 		selectedPreset = urlParams.preset;
 		fromDate = dateToCalendarDate(range.from, timezone);
 		toDate = dateToCalendarDate(range.to, timezone);
