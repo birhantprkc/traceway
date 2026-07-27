@@ -17,9 +17,10 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Button } from '$lib/components/ui/button';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
+	import * as Tooltip from '$lib/components/ui/tooltip';
 	import ExpandedLogRow from '$lib/components/trace-logs/expanded-log-row.svelte';
 	import LogMessage from '$lib/components/trace-logs/log-message.svelte';
-	import { Plus, X } from '@lucide/svelte';
+	import { Check, Plus, X } from '@lucide/svelte';
 	import { CalendarDate } from '@internationalized/date';
 	import {
 		parseTimeRangeFromUrl,
@@ -163,24 +164,59 @@
 	let addFilterOpen = $state(false);
 	let dialogKey = $state('');
 	let dialogValue = $state('');
+	let dialogExclude = $state(false);
 	let dialogError = $state('');
+	// Index into attributeFilters when editing an existing pill, null when adding.
+	let dialogEditIndex = $state<number | null>(null);
 
 	function openAddFilterDialog() {
 		dialogKey = '';
 		dialogValue = '';
+		dialogExclude = false;
 		dialogError = '';
+		dialogEditIndex = null;
+		addFilterOpen = true;
+	}
+
+	function openEditFilterDialog(index: number) {
+		const f = attributeFilters[index];
+		dialogKey = `${f.scope}.${f.key}`;
+		dialogValue = f.value;
+		dialogExclude = f.exclude;
+		dialogError = '';
+		dialogEditIndex = index;
 		addFilterOpen = true;
 	}
 
 	function submitDialogFilter() {
-		const composed = `${dialogKey.trim()}=${dialogValue}`;
+		const composed = `${dialogKey.trim()}${dialogExclude ? '!=' : '='}${dialogValue}`;
 		const parsed = parseAttributeFilter(composed);
 		if (!parsed) {
 			dialogError = 'Key must start with resource., scope., or log.';
 			return;
 		}
-		addAttributeFilter(parsed);
+		if (dialogEditIndex !== null) {
+			updateAttributeFilter(dialogEditIndex, parsed);
+		} else {
+			addAttributeFilter(parsed);
+		}
 		addFilterOpen = false;
+	}
+
+	function updateAttributeFilter(index: number, filter: AttributeFilter) {
+		const dup = attributeFilters.some(
+			(f, i) =>
+				i !== index &&
+				f.scope === filter.scope &&
+				f.key === filter.key &&
+				f.value === filter.value &&
+				f.exclude === filter.exclude
+		);
+		attributeFilters = dup
+			? attributeFilters.filter((_, i) => i !== index)
+			: attributeFilters.map((f, i) => (i === index ? filter : f));
+		page = 1;
+		loadData(true);
 	}
 
 	function addAttributeFilter(filter: AttributeFilter) {
@@ -553,13 +589,18 @@
 		</button>
 		{#each metaFilterChips as chip (chip.field)}
 			<span class="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-mono">
-				<span class="text-muted-foreground">{chip.label}</span>
-				<span>=</span>
-				<span title={chip.value}>{shortenChipValue(chip.value)}</span>
+				<Tooltip.Root>
+					<Tooltip.Trigger class="inline-flex cursor-default items-center gap-1">
+						<span class="text-muted-foreground">{chip.label}</span>
+						<span>=</span>
+						<span>{shortenChipValue(chip.value)}</span>
+					</Tooltip.Trigger>
+					<Tooltip.Content>Not editable</Tooltip.Content>
+				</Tooltip.Root>
 				<button
 					type="button"
 					aria-label="Remove filter"
-					class="ml-1 text-muted-foreground hover:text-foreground"
+					class="ml-1 cursor-pointer text-muted-foreground hover:text-foreground"
 					onclick={() => toggleMetaFilter(chip.field, chip.value)}
 				>
 					<X class="h-3 w-3" />
@@ -570,13 +611,20 @@
 			<span
 				class="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-mono"
 			>
-				<span class="text-muted-foreground">{f.scope}.{f.key}</span>
-				<span class={f.exclude ? 'text-red-500' : ''}>{f.exclude ? '!=' : '='}</span>
-				<span>{f.value}</span>
+				<button
+					type="button"
+					aria-label="Edit filter"
+					class="inline-flex cursor-pointer items-center gap-1 hover:text-primary"
+					onclick={() => openEditFilterDialog(i)}
+				>
+					<span class="text-muted-foreground">{f.scope}.{f.key}</span>
+					<span class={f.exclude ? 'text-red-500' : ''}>{f.exclude ? '!=' : '='}</span>
+					<span>{f.value}</span>
+				</button>
 				<button
 					type="button"
 					aria-label="Remove filter"
-					class="ml-1 text-muted-foreground hover:text-foreground"
+					class="ml-1 cursor-pointer text-muted-foreground hover:text-foreground"
 					onclick={() => removeAttributeFilter(i)}
 				>
 					<X class="h-3 w-3" />
@@ -588,7 +636,9 @@
 	<AlertDialog.Root open={addFilterOpen} onOpenChange={(open) => (addFilterOpen = open)}>
 		<AlertDialog.Content>
 			<AlertDialog.Header>
-				<AlertDialog.Title>Add attribute filter</AlertDialog.Title>
+				<AlertDialog.Title>
+					{dialogEditIndex !== null ? 'Edit attribute filter' : 'Add attribute filter'}
+				</AlertDialog.Title>
 				<AlertDialog.Description>
 					Attribute keys must start with <code class="font-mono">resource.</code>,
 					<code class="font-mono">scope.</code>, or <code class="font-mono">log.</code>.
@@ -603,6 +653,31 @@
 						onkeydown={handleDialogKeydown}
 					/>
 				</label>
+				<div class="flex flex-col gap-1 text-sm">
+					<span class="font-medium">Operator</span>
+					<div class="flex">
+						<button
+							type="button"
+							aria-pressed={!dialogExclude}
+							class="flex-1 rounded-l-md border px-3 py-2 text-sm transition-colors {!dialogExclude
+								? 'z-10 border-primary bg-primary font-semibold text-primary-foreground'
+								: 'border-input text-muted-foreground hover:text-foreground'}"
+							onclick={() => (dialogExclude = false)}
+						>
+							<span class="font-mono">=</span> Equals
+						</button>
+						<button
+							type="button"
+							aria-pressed={dialogExclude}
+							class="-ml-px flex-1 rounded-r-md border px-3 py-2 text-sm transition-colors {dialogExclude
+								? 'z-10 border-primary bg-primary font-semibold text-primary-foreground'
+								: 'border-input text-muted-foreground hover:text-foreground'}"
+							onclick={() => (dialogExclude = true)}
+						>
+							<span class="font-mono">≠</span> Not equals
+						</button>
+					</div>
+				</div>
 				<label class="flex flex-col gap-1 text-sm">
 					<span class="font-medium">Value</span>
 					<Input
@@ -618,7 +693,11 @@
 			<AlertDialog.Footer>
 				<Button variant="outline" onclick={() => (addFilterOpen = false)}>Cancel</Button>
 				<Button onclick={submitDialogFilter}>
-					<Plus class="h-4 w-4" /> Add filter
+					{#if dialogEditIndex !== null}
+						<Check class="h-4 w-4" /> Update filter
+					{:else}
+						<Plus class="h-4 w-4" /> Add filter
+					{/if}
 				</Button>
 			</AlertDialog.Footer>
 		</AlertDialog.Content>
