@@ -10,17 +10,16 @@
 	import { getTimezone } from '$lib/state/timezone.svelte';
 	import { TracewayTableHeader } from '$lib/components/ui/traceway-table-header';
 	import { TableEmptyState } from '$lib/components/ui/table-empty-state';
-	import { PaginationFooter } from '$lib/components/ui/pagination-footer';
 	import { TimeRangePicker } from '$lib/components/ui/time-range-picker';
 	import { SeverityBadge } from '$lib/components/ui/severity-badge';
 	import * as Select from '$lib/components/ui/select';
 	import { Input } from '$lib/components/ui/input';
-	import { Button } from '$lib/components/ui/button';
+	import { Button, buttonVariants } from '$lib/components/ui/button';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import * as Tooltip from '$lib/components/ui/tooltip';
 	import ExpandedLogRow from '$lib/components/trace-logs/expanded-log-row.svelte';
 	import LogMessage from '$lib/components/trace-logs/log-message.svelte';
-	import { Check, Plus, X } from '@lucide/svelte';
+	import { Check, Play, Plus, X } from '@lucide/svelte';
 	import { CalendarDate } from '@internationalized/date';
 	import {
 		parseTimeRangeFromUrl,
@@ -69,10 +68,92 @@
 	let error = $state('');
 	let expandedId = $state<string | null>(null);
 
-	let page = $state(1);
-	let pageSize = $state(50);
+	const pageSize = 50;
 	let total = $state(0);
-	let totalPages = $state(0);
+	let loadedPages = 1;
+	let loadingMore = $state(false);
+	let loadMoreError = $state('');
+
+	type LogsResponse = { data: LogRecord[]; pagination: { total: number; totalPages: number } };
+
+	// Live tail mode: poll only the diff since the last poll and prepend it.
+	const LIVE_POLL_MS = 5000;
+	// Re-query a little of the already-covered window each poll so records that
+	// arrive late (SDK batching) aren't missed; dedup by id drops the overlap.
+	const LIVE_OVERLAP_MS = 10_000;
+	// Cap the buffer so a long-running live session can't grow the DOM forever.
+	const MAX_ROWS = 2000;
+	let live = $state(false);
+	let liveTimer: ReturnType<typeof setInterval> | null = null;
+	let pollBusy = false;
+	let liveSinceMs = 0;
+	// Time range used by the last full load. loadMore and livePoll reuse it so
+	// page offsets stay stable while the wall clock moves.
+	let lastFromISO = '';
+	let lastToISO = '';
+
+	// Windowed rendering: only rows near the viewport are mounted, spacer rows
+	// keep the scrollbar honest. Row height is measured from the first rendered
+	// row; the (single) expanded row's extra height is measured separately.
+	const OVERSCAN = 10;
+	let scrollEl = $state<HTMLDivElement | null>(null);
+	let scrollTop = $state(0);
+	let viewportH = $state(600);
+	let rowH = $state(44);
+	let expandedHeight = $state(0);
+
+	const expandedIndex = $derived(expandedId ? logs.findIndex((l) => l.id === expandedId) : -1);
+
+	function offsetOf(i: number): number {
+		return i * rowH + (expandedIndex >= 0 && i > expandedIndex ? expandedHeight : 0);
+	}
+
+	function indexAt(y: number): number {
+		if (expandedIndex < 0) return Math.floor(y / rowH);
+		const afterExpandedTop = (expandedIndex + 1) * rowH + expandedHeight;
+		if (y < (expandedIndex + 1) * rowH) return Math.floor(y / rowH);
+		if (y < afterExpandedTop) return expandedIndex;
+		return expandedIndex + 1 + Math.floor((y - afterExpandedTop) / rowH);
+	}
+
+	const winStart = $derived(Math.max(0, indexAt(scrollTop) - OVERSCAN));
+	const winEnd = $derived(Math.min(logs.length, indexAt(scrollTop + viewportH) + 1 + OVERSCAN));
+	const topPad = $derived(offsetOf(winStart));
+	const bottomPad = $derived(Math.max(0, offsetOf(logs.length) - offsetOf(winEnd)));
+	const visibleLogs = $derived(logs.slice(winStart, winEnd));
+
+	// Size the scroll container so the table ends at the bottom of the viewport
+	// instead of overflowing the page. max-height (not height) so a short result
+	// list doesn't leave a stretched empty table.
+	function updateMaxHeight() {
+		if (!scrollEl) return;
+		const top = scrollEl.getBoundingClientRect().top;
+		scrollEl.style.maxHeight = `${Math.max(240, window.innerHeight - top - 24)}px`;
+	}
+
+	$effect(() => {
+		// Anything that can move the table's top edge (wrapping filter pills,
+		// loading states) should trigger a re-measure.
+		void metaFilterChips.length;
+		void attributeFilters.length;
+		void loading;
+		updateMaxHeight();
+	});
+
+	$effect(() => {
+		void logs.length;
+		void expandedId;
+		if (!scrollEl) return;
+		const first = scrollEl.querySelector('tr[data-log-id]') as HTMLElement | null;
+		if (first && first.offsetHeight > 0) rowH = first.offsetHeight;
+		if (expandedId) {
+			const main = scrollEl.querySelector(`tr[data-log-id="${CSS.escape(expandedId)}"]`);
+			const expanded = main?.nextElementSibling as HTMLElement | null;
+			expandedHeight = expanded?.offsetHeight ?? 0;
+		} else {
+			expandedHeight = 0;
+		}
+	});
 
 	type AttributeFilter = {
 		scope: 'resource' | 'scope' | 'log';
@@ -215,7 +296,6 @@
 		attributeFilters = dup
 			? attributeFilters.filter((_, i) => i !== index)
 			: attributeFilters.map((f, i) => (i === index ? filter : f));
-		page = 1;
 		loadData(true);
 	}
 
@@ -230,7 +310,6 @@
 		if (!dup) {
 			attributeFilters = [...attributeFilters, filter];
 		}
-		page = 1;
 		loadData(true);
 	}
 
@@ -270,7 +349,6 @@
 		} else {
 			attributeFilters = attributeFilters.filter((_, i) => i !== existing);
 		}
-		page = 1;
 		loadData(true);
 	}
 
@@ -308,7 +386,6 @@
 				scopeNameFilter = active ? '' : value;
 				break;
 		}
-		page = 1;
 		loadData(true);
 	}
 
@@ -398,13 +475,28 @@
 
 	function removeAttributeFilter(index: number) {
 		attributeFilters = attributeFilters.filter((_, i) => i !== index);
-		page = 1;
 		loadData(true);
+	}
+
+	function currentFilterBody() {
+		return {
+			search: searchQuery.trim(),
+			searchType,
+			minSeverity,
+			serviceName: serviceName.trim(),
+			traceId: traceIdFilter.trim(),
+			spanId: spanIdFilter.trim(),
+			scopeName: scopeNameFilter.trim(),
+			body: bodyFilter,
+			attributeFilters
+		};
 	}
 
 	async function loadData(pushToHistory = true) {
 		loading = true;
 		error = '';
+		loadMoreError = '';
+		loadedPages = 1;
 
 		if (selectedPreset) {
 			const range = getTimeRangeFromPreset(selectedPreset, timezone);
@@ -417,30 +509,25 @@
 		updateLogsUrl(pushToHistory);
 
 		try {
+			lastFromISO = getFromDateTimeUTC();
+			lastToISO = getToDateTimeUTC();
 			const requestBody = {
-				fromDate: getFromDateTimeUTC(),
-				toDate: getToDateTimeUTC(),
+				fromDate: lastFromISO,
+				toDate: lastToISO,
 				orderBy: sortField,
 				sortDirection,
-				pagination: { page, pageSize },
-				search: searchQuery.trim(),
-				searchType,
-				minSeverity,
-				serviceName: serviceName.trim(),
-				traceId: traceIdFilter.trim(),
-				spanId: spanIdFilter.trim(),
-				scopeName: scopeNameFilter.trim(),
-				body: bodyFilter,
-				attributeFilters
+				pagination: { page: 1, pageSize },
+				...currentFilterBody()
 			};
 
 			const response = (await api.post('/logs', requestBody, {
 				projectId: projectsState.currentProjectId ?? undefined
-			})) as { data: LogRecord[]; pagination: { total: number; totalPages: number } };
+			})) as LogsResponse;
 
 			logs = response.data || [];
 			total = response.pagination.total;
-			totalPages = response.pagination.totalPages;
+			scrollEl?.scrollTo({ top: 0 });
+			scrollTop = 0;
 		} catch (e: any) {
 			console.error(e);
 			error = e.message || 'Failed to load logs';
@@ -449,17 +536,93 @@
 		}
 	}
 
-	function handlePageChange(newPage: number) {
-		if (newPage >= 1 && newPage <= totalPages) {
-			page = newPage;
-			loadData(true);
+	async function loadMore() {
+		if (loadingMore || loading) return;
+		loadingMore = true;
+		loadMoreError = '';
+		try {
+			const requestBody = {
+				fromDate: lastFromISO,
+				toDate: lastToISO,
+				orderBy: sortField,
+				sortDirection,
+				pagination: { page: loadedPages + 1, pageSize },
+				...currentFilterBody()
+			};
+
+			const response = (await api.post('/logs', requestBody, {
+				projectId: projectsState.currentProjectId ?? undefined
+			})) as LogsResponse;
+
+			// Live-prepended rows shift page offsets, so drop anything already loaded.
+			const seen = new Set(logs.map((l) => l.id));
+			const fresh = (response.data || []).filter((l) => !seen.has(l.id));
+			logs = [...logs, ...fresh];
+			loadedPages += 1;
+			total = response.pagination.total;
+		} catch (e: any) {
+			console.error(e);
+			loadMoreError = e.message || 'Failed to load more logs';
+		} finally {
+			loadingMore = false;
 		}
 	}
 
-	function handlePageSizeChange(newPageSize: number) {
-		pageSize = newPageSize;
-		page = 1;
+	async function livePoll() {
+		if (pollBusy || loading) return;
+		pollBusy = true;
+		try {
+			const nowMs = Date.now();
+			const response = (await api.post(
+				'/logs',
+				{
+					fromDate: new Date(liveSinceMs - LIVE_OVERLAP_MS).toISOString(),
+					toDate: new Date(nowMs).toISOString(),
+					orderBy: 'timestamp',
+					sortDirection: 'desc',
+					pagination: { page: 1, pageSize },
+					...currentFilterBody()
+				},
+				{ projectId: projectsState.currentProjectId ?? undefined }
+			)) as LogsResponse;
+
+			const seen = new Set(logs.map((l) => l.id));
+			const fresh = (response.data || []).filter((l) => !seen.has(l.id));
+			if (fresh.length > 0) {
+				logs = [...fresh, ...logs].slice(0, MAX_ROWS);
+				total += fresh.length;
+			}
+			liveSinceMs = nowMs;
+		} catch (e) {
+			console.error(e);
+		} finally {
+			pollBusy = false;
+		}
+	}
+
+	function toggleLive() {
+		if (live) {
+			stopLive();
+			return;
+		}
+		// Live tail only makes sense newest-first: clear any custom sort.
+		if (sortField !== 'timestamp' || sortDirection !== 'desc') {
+			sortField = 'timestamp';
+			sortDirection = 'desc';
+			setSortState(SORT_STORAGE_KEY, { field: sortField, direction: sortDirection });
+		}
+		live = true;
+		liveSinceMs = Date.now();
 		loadData(true);
+		liveTimer = setInterval(livePoll, LIVE_POLL_MS);
+	}
+
+	function stopLive() {
+		live = false;
+		if (liveTimer) {
+			clearInterval(liveTimer);
+			liveTimer = null;
+		}
 	}
 
 	function handleTimeRangeChange(
@@ -472,12 +635,12 @@
 		fromTime = from.time;
 		toTime = to.time;
 		selectedPreset = preset;
-		page = 1;
+		// A custom range is a fixed window in the past; there is nothing to tail.
+		if (!preset && live) stopLive();
 		loadData(true);
 	}
 
 	function handleSearch() {
-		page = 1;
 		loadData(true);
 	}
 
@@ -489,11 +652,12 @@
 	}
 
 	function handleSort(field: string) {
+		// Live tail is pinned to newest-first; sorting drops back to history mode.
+		if (live) stopLive();
 		const newSort = handleSortClick(field, sortField, sortDirection);
 		sortField = newSort.field;
 		sortDirection = newSort.direction;
 		setSortState(SORT_STORAGE_KEY, newSort);
-		page = 1;
 		loadData(true);
 	}
 
@@ -514,7 +678,7 @@
 		scopeNameFilter = urlParams.scopeName;
 		bodyFilter = urlParams.body;
 		attributeFilters = urlParams.attributeFilters;
-		page = 1;
+		if (!urlParams.preset && live) stopLive();
 		loadData(false);
 	}
 
@@ -524,12 +688,15 @@
 
 	onMount(() => {
 		window.addEventListener('popstate', handlePopState);
+		window.addEventListener('resize', updateMaxHeight);
 		loadData(false);
 	});
 
 	onDestroy(() => {
+		stopLive();
 		if (typeof window !== 'undefined') {
 			window.removeEventListener('popstate', handlePopState);
+			window.removeEventListener('resize', updateMaxHeight);
 		}
 	});
 </script>
@@ -537,7 +704,37 @@
 <div class="space-y-4">
 	<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 		<h2 class="text-3xl font-semibold tracking-tight">Logs</h2>
-		<div class="w-full sm:w-auto">
+		<div class="flex w-full items-center gap-2 sm:w-auto">
+			{#if selectedPreset === null}
+				<Tooltip.Root>
+					<!-- buttonVariants sets aria-disabled:pointer-events-none, which would
+					     swallow hover and prevent this tooltip from ever opening. -->
+					<Tooltip.Trigger
+						class="{buttonVariants({
+							variant: 'outline'
+						})} shrink-0 !pointer-events-auto !cursor-not-allowed opacity-50"
+						aria-disabled="true"
+					>
+						<Play class="h-4 w-4" />
+						Live
+					</Tooltip.Trigger>
+					<Tooltip.Content>
+						Live follows the current time, so it's unavailable with a custom time range. Pick a
+						preset like "24 hours" to tail logs.
+					</Tooltip.Content>
+				</Tooltip.Root>
+			{:else}
+				<Button
+					variant={live ? 'default' : 'outline'}
+					class="shrink-0"
+					aria-pressed={live}
+					title={live ? 'Stop live tail' : 'Tail new logs in realtime'}
+					onclick={toggleLive}
+				>
+					<Play class="h-4 w-4 {live ? 'fill-current' : ''}" />
+					Live
+				</Button>
+			{/if}
 			<TimeRangePicker
 				bind:fromDate
 				bind:toDate
@@ -704,6 +901,12 @@
 	</AlertDialog.Root>
 
 	<div class="overflow-hidden rounded-md border">
+		<div
+			bind:this={scrollEl}
+			bind:clientHeight={viewportH}
+			onscroll={() => (scrollTop = scrollEl?.scrollTop ?? 0)}
+			class="overflow-auto [&_[data-slot=table-container]]:overflow-visible"
+		>
 		<Table.Root>
 			{#if loading}
 				<Table.Body>
@@ -728,7 +931,10 @@
 					<TableEmptyState colspan={5} message="No logs found." />
 				</Table.Body>
 			{:else}
-				<Table.Header>
+				<!-- Solid thead bg so rows can't show through the translucent th
+				     bg-muted/60 while it is sticky; the th keeps its own darker
+				     background on top, same look as the endpoints table. -->
+				<Table.Header class="sticky top-0 z-10 bg-background">
 					<Table.Row>
 						<TracewayTableHeader
 							label="Timestamp"
@@ -766,8 +972,12 @@
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
-					{#each logs as log (log.id)}
+					{#if topPad > 0}
+						<tr aria-hidden="true" style="height: {topPad}px"></tr>
+					{/if}
+					{#each visibleLogs as log (log.id)}
 						<Table.Row
+							data-log-id={log.id}
 							class="group cursor-pointer hover:bg-muted/50"
 							onclick={() => toggleExpanded(log.id)}
 						>
@@ -807,19 +1017,29 @@
 							/>
 						{/if}
 					{/each}
+					{#if bottomPad > 0}
+						<tr aria-hidden="true" style="height: {bottomPad}px"></tr>
+					{/if}
+					<Table.Row class="hover:bg-transparent">
+						<Table.Cell colspan={5}>
+							<div class="flex items-center justify-center gap-3 py-1">
+								{#if logs.length < total}
+									<Button variant="outline" size="sm" onclick={loadMore} disabled={loadingMore}>
+										{loadingMore ? 'Loading…' : `Load ${pageSize} more`}
+									</Button>
+								{/if}
+								{#if loadMoreError}
+									<span class="text-xs text-red-500">{loadMoreError}</span>
+								{/if}
+								<span class="text-xs text-muted-foreground">
+									Showing {logs.length.toLocaleString()} of {total.toLocaleString()} logs
+								</span>
+							</div>
+						</Table.Cell>
+					</Table.Row>
 				</Table.Body>
 			{/if}
 		</Table.Root>
+		</div>
 	</div>
-
-	<PaginationFooter
-		currentPage={page}
-		{totalPages}
-		{pageSize}
-		totalItems={total}
-		onPageChange={handlePageChange}
-		onPageSizeChange={handlePageSizeChange}
-		{loading}
-		itemLabel="log"
-	/>
 </div>
