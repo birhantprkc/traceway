@@ -22,6 +22,18 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Validate credentials
+        env:
+          GH_TOKEN: ${{ secrets.GH_PUSH_TOKEN }}
+        run: |
+          echo "GH_PUSH_TOKEN authenticates as: $(gh api user --jq .login)"
+          gh auth setup-git
+          git push --dry-run origin "HEAD:refs/heads/tw-preflight-$GITHUB_RUN_ID"
+          curl -sf https://api.anthropic.com/v1/models \
+            -H "x-api-key: ${{ secrets.ANTHROPIC_API_KEY }}" \
+            -H "anthropic-version: 2023-06-01" -o /dev/null \
+            || { echo "ANTHROPIC_API_KEY was rejected"; exit 1; }
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: backend/go.mod
@@ -103,9 +115,30 @@ jobs:
             The report file is mandatory. Write it even when you change
             nothing.
 
+            Never create helper scripts, notes, or any other scratch files
+            inside the repository working tree; everything that ships in the
+            working tree becomes part of the pull request. Use $RUNNER_TEMP
+            for anything temporary.
+
+      - name: Save diff and report as artifact
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/artifact"
+          cp "$RUNNER_TEMP/fix-report.md" "$RUNNER_TEMP/artifact/" 2>/dev/null || true
+          git add -A
+          git diff HEAD > "$RUNNER_TEMP/artifact/fix.patch" || true
+          git status --porcelain > "$RUNNER_TEMP/artifact/changed-files.txt" || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: traceway-fix-issue-${{ github.event.issue.number }}
+          path: ${{ runner.temp }}/artifact
+          if-no-files-found: ignore
+
       - name: Publish result
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GH_PUSH_TOKEN }}
           ISSUE: ${{ github.event.issue.number }}
         run: |
           REPORT="$RUNNER_TEMP/fix-report.md"
