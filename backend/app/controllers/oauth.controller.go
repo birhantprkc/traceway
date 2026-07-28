@@ -76,7 +76,13 @@ func (a oauthController) Callback(c *gin.Context) {
 	req := c.Request.WithContext(context.WithValue(c.Request.Context(), gothic.ProviderParamKey, externalToGothProvider(provider)))
 	gothUser, err := gothic.CompleteUserAuth(c.Writer, req)
 	if err != nil {
-		traceway.CaptureException(fmt.Errorf("OAuth complete failed (provider=%s): %w", provider, err))
+		// A callback without a matching session is a client-side condition
+		// (bots probing the URL, replayed or stale callbacks, sessions expiring
+		// past their TTL), not an application failure, so it is deliberately
+		// not captured. gothic exposes no sentinel for it, hence the message match.
+		if !strings.Contains(err.Error(), "could not find a matching session") {
+			traceway.CaptureException(fmt.Errorf("OAuth complete failed (provider=%s): %w", provider, err))
+		}
 		a.redirectError(c, "oauth_failed")
 		return
 	}
