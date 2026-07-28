@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import { browser } from '$app/environment';
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/api';
@@ -70,7 +70,13 @@
 	let expandedId = $state<string | null>(null);
 
 	const pageSize = 50;
+	// total counts the fixed history window (lastFromISO..lastToISO) as reported
+	// by the backend; liveExtra counts live-prepended rows newer than lastToISO.
+	// Keeping them separate stops loadMore's total refresh from erasing the live
+	// rows out of "Showing X of Y".
 	let total = $state(0);
+	let liveExtra = $state(0);
+	const displayTotal = $derived(total + liveExtra);
 	let loadedPages = 1;
 	let loadingMore = $state(false);
 	let loadMoreError = $state('');
@@ -110,7 +116,10 @@
 
 	// Windowed rendering: only rows near the viewport are mounted, spacer rows
 	// keep the scrollbar honest. Row height is measured from the first rendered
-	// row; the (single) expanded row's extra height is measured separately.
+	// row; the (single) expanded row's extra height is measured separately and
+	// folded into the offset math piecewise. INVARIANT: every collapsed row must
+	// render at the same height — all cells truncate to one line today; a cell
+	// that wraps would desync the spacer math and make the scrollbar drift.
 	const OVERSCAN = 10;
 	let scrollEl = $state<HTMLDivElement | null>(null);
 	let scrollTop = $state(0);
@@ -545,6 +554,7 @@
 			if (gen !== requestGen) return;
 			logs = response.data || [];
 			total = response.pagination.total;
+			liveExtra = 0;
 			scrollEl?.scrollTo({ top: 0 });
 			scrollTop = 0;
 		} catch (e: any) {
@@ -622,16 +632,44 @@
 				// Restart the view from the newest rows instead of prepending
 				// across a hole. Moving lastToISO up and treating the buffer as
 				// the first LIVE_PAGE_SIZE/pageSize pages keeps "Load more"
-				// offsets aligned with the new tail.
+				// offsets aligned with the new tail. The poll-window total
+				// undercounts the widened history window; the next loadMore
+				// refreshes it.
 				logs = response.data;
 				total = response.pagination.total;
+				liveExtra = 0;
 				lastToISO = toISO;
 				loadedPages = LIVE_PAGE_SIZE / pageSize;
 				scrollEl?.scrollTo({ top: 0 });
 				scrollTop = 0;
 			} else if (fresh.length > 0) {
-				logs = [...fresh, ...logs].slice(0, MAX_ROWS);
-				total += fresh.length;
+				const merged = [...fresh, ...logs];
+				if (merged.length > MAX_ROWS) {
+					// Outside the replace branch the buffer is a contiguous
+					// newest-first run, so after truncation it is exactly the
+					// newest MAX_ROWS of (lastFromISO, toISO]. Re-anchor the
+					// "Load more" window to that tail so the next page follows
+					// it instead of leaving a hole where the dropped rows were.
+					logs = merged.slice(0, MAX_ROWS);
+					lastToISO = toISO;
+					loadedPages = MAX_ROWS / pageSize;
+					total += liveExtra + fresh.length;
+					liveExtra = 0;
+				} else {
+					logs = merged;
+					liveExtra += fresh.length;
+				}
+				// Keep the rows the user is looking at pinned in place while
+				// new rows grow the list above them; at the very top, stay
+				// pinned to the newest row instead.
+				if (scrollTop > 0 && scrollEl) {
+					const target = scrollTop + fresh.length * rowH;
+					tick().then(() => {
+						if (!scrollEl) return;
+						scrollEl.scrollTop = target;
+						scrollTop = scrollEl.scrollTop;
+					});
+				}
 			}
 			liveSinceMs = nowMs;
 		} catch (e) {
@@ -1068,7 +1106,7 @@
 					<Table.Row class="hover:bg-transparent">
 						<Table.Cell colspan={5}>
 							<div class="flex items-center justify-center gap-3 py-1">
-								{#if logs.length < total}
+								{#if logs.length < displayTotal}
 									<Button variant="outline" size="sm" onclick={loadMore} disabled={loadingMore}>
 										{loadingMore ? 'Loading…' : `Load ${pageSize} more`}
 									</Button>
@@ -1077,7 +1115,7 @@
 									<span class="text-xs text-red-500">{loadMoreError}</span>
 								{/if}
 								<span class="text-xs text-muted-foreground">
-									Showing {logs.length.toLocaleString()} of {total.toLocaleString()} logs
+									Showing {logs.length.toLocaleString()} of {displayTotal.toLocaleString()} logs
 								</span>
 							</div>
 						</Table.Cell>
