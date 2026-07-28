@@ -8,6 +8,7 @@ jobs:
   fix:
     if: github.event.label.name == 'traceway' && github.event.issue.user.login == 'dusanstanojeviccs'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     concurrency:
       group: traceway-fix-${{ github.event.issue.number }}
     permissions:
@@ -19,6 +20,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: actions/setup-go@v5
         with:
@@ -36,8 +38,6 @@ jobs:
 
       - name: Investigate and fix
         uses: anthropics/claude-code-action@v1
-        env:
-          GH_TOKEN: ${{ github.token }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           plugin_marketplaces: |
@@ -47,7 +47,7 @@ jobs:
           claude_args: |
             --model claude-opus-4-8
             --effort xhigh
-            --allowedTools "Bash(traceway:*),Bash(jq:*),Bash(git:*),Bash(gh:*),Bash(go:*),Read,Edit,Write,Glob,Grep"
+            --allowedTools "Bash(traceway:*),Bash(jq:*),Bash(go:*),Read,Edit,Write,Glob,Grep"
             --max-turns 60
           prompt: |
             Traceway detected a production error and opened issue
@@ -69,23 +69,73 @@ jobs:
             CLI is already installed and authenticated against the correct
             project; never run `traceway login`.
 
-            If the notification contains no Hash (for example a channel test
-            notification), say so in a comment with `gh issue comment` and
-            stop.
+            You have NO access to git or gh, and you must not attempt to
+            commit, push, or call any network tool. A later workflow step
+            handles all of that. Your job is only to investigate, edit files
+            in the working tree if a fix is warranted, and write a report.
 
-            Once the investigation ties the root cause to code in this
-            repository:
-
-            1. Fix the cause, not the symptom. Keep the diff minimal. Run the
-               relevant Go tests for the packages you touch.
-            2. Create a branch named `traceway/fix-<hash>`, commit, push, and
-               open a pull request with `gh pr create`. The PR body must start
-               with "Fixes #${{ github.event.issue.number }}" and include a
-               short root cause analysis plus the "View details" link from the
-               notification.
-            3. After the PR is open, archive the exception:
-               `traceway exceptions archive <hash> --yes`.
-
+            If the investigation ties the root cause to code in this
+            repository, fix the cause, not the symptom. Keep the diff
+            minimal. Run the relevant Go tests for the packages you touch.
             If you cannot tie the root cause to code with confidence, do NOT
-            guess a fix. Comment your full analysis on the issue with
-            `gh issue comment` and stop.
+            guess a fix; leave the working tree untouched.
+
+            Do not add code comments explaining your change, why it is
+            correct, or what the error was. The diff must read like the
+            surrounding code, following the repository's CLAUDE.md style
+            rules. ALL explanation belongs in the report file, none of it in
+            the code.
+
+            When you are done, write your report to the file
+            "$RUNNER_TEMP/fix-report.md" in exactly this format:
+
+            Line 1: "STATUS: fixed" if you applied a fix, "STATUS: analysis"
+            if you investigated but did not change code, or "STATUS: no-hash"
+            if the notification contained no Hash (for example a channel test
+            notification).
+            Line 2: "HASH: <the exception hash>" or "HASH: none".
+            Line 3 onward: your root cause analysis in markdown. If STATUS is
+            fixed, explain the root cause, the fix, and how you verified it,
+            and include the "View details" link from the notification. This
+            text becomes the pull request description or the issue comment,
+            so write it for a human reviewer.
+
+            The report file is mandatory. Write it even when you change
+            nothing.
+
+      - name: Publish result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          REPORT="$RUNNER_TEMP/fix-report.md"
+          if [ ! -f "$REPORT" ]; then
+            gh issue comment "$ISSUE" --body "The auto-fix agent finished without producing a report. Check the workflow run log."
+            exit 1
+          fi
+
+          STATUS=$(sed -n '1s/^STATUS: *//p' "$REPORT")
+          HASH=$(sed -n '2s/^HASH: *//p' "$REPORT")
+          BODY=$(tail -n +3 "$REPORT")
+
+          if [ "$STATUS" = "fixed" ] && ! echo "$HASH" | grep -Eq '^[0-9a-f]{16}$'; then
+            gh issue comment "$ISSUE" --body "The agent reported a fix but an invalid hash ('$HASH'); not opening a PR. Check the run log."
+            exit 1
+          fi
+
+          if [ "$STATUS" = "fixed" ] && [ -n "$(git status --porcelain)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            gh auth setup-git
+            BRANCH="traceway/fix-$HASH"
+            git checkout -b "$BRANCH"
+            git add -A
+            git commit -m "Fix production error $HASH"
+            git push -u origin "$BRANCH"
+            { echo "Fixes #$ISSUE"; echo; echo "$BODY"; } | \
+              gh pr create --title "Auto-fix: traceway $HASH (issue #$ISSUE)" --head "$BRANCH" --body-file -
+            traceway exceptions archive "$HASH" --yes
+          else
+            { echo "Auto-fix agent report (no PR opened):"; echo; echo "$BODY"; } | \
+              gh issue comment "$ISSUE" --body-file -
+          fi
