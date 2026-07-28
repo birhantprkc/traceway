@@ -98,8 +98,8 @@
 	--card-foreground: var(--fg-0);
 	--popover: var(--ink-3);
 	--popover-foreground: var(--fg-0);
-	--primary: var(--blue-bright);
-	--primary-foreground: oklch(0.18 0.05 258);
+	--primary: var(--blue-deep);
+	--primary-foreground: oklch(0.985 0.003 255);
 	--secondary: var(--ink-3);
 	--secondary-foreground: var(--fg-0);
 	--muted: var(--ink-3);
@@ -118,8 +118,8 @@
 	--trend-bar: var(--blue-bright);
 	--sidebar: var(--ink-1);
 	--sidebar-foreground: var(--fg-1);
-	--sidebar-primary: var(--blue-bright);
-	--sidebar-primary-foreground: var(--fg-0);
+	--sidebar-primary: var(--blue-deep);
+	--sidebar-primary-foreground: oklch(0.985 0.003 255);
 	--sidebar-accent: var(--blue-deep);
 	--sidebar-accent-foreground: oklch(0.985 0.003 255);
 	--sidebar-border: oklch(1 0 0 / 6%);

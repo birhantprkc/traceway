@@ -35,7 +35,6 @@
 		traceId,
 		distributedTraceId = null,
 		spans,
-		rootSpan,
 		traceRecordedAt
 	}: {
 		projectId: string;
@@ -45,10 +44,6 @@
 		rootSpan: { id: string; name: string };
 		traceRecordedAt: string;
 	} = $props();
-
-	// rootSpan kept on the prop surface for future use; not referenced here now
-	// that the root-span chip fallback is gone.
-	void rootSpan;
 
 	const timezone = $derived(getTimezone());
 

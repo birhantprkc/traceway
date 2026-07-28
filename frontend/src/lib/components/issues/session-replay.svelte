@@ -158,7 +158,9 @@
 
 	let pageUrl = $derived.by(() => {
 		if (!events || events.length === 0 || isFlutterVideo) return '';
-		const metaEvent = events.find((e: any) => e.type === 4);
+		const metaEvent = (events as (eventWithTime & { data?: { href?: string } })[]).find(
+			(e) => e.type === 4
+		);
 		return metaEvent?.data?.href ?? '';
 	});
 
@@ -178,7 +180,7 @@
 		player = new rrwebPlayer({
 			target: container,
 			props: {
-				events,
+				events: events as eventWithTime[],
 				width,
 				height: getPlayerHeight(width),
 				autoPlay: false,

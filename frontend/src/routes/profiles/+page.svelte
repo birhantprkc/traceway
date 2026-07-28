@@ -33,6 +33,7 @@
 	} from '$lib/utils/sort-storage';
 
 	const timezone = $derived(getTimezone());
+	const initialTimezone = getTimezone();
 
 	type ProfileGroup = {
 		serviceName: string;
@@ -72,14 +73,14 @@
 			.join(' ');
 	}
 
-	const initialUrlParams = parseTimeRangeFromUrl(timezone);
-	const initialRange = getResolvedTimeRange(initialUrlParams, timezone);
+	const initialUrlParams = parseTimeRangeFromUrl(initialTimezone);
+	const initialRange = getResolvedTimeRange(initialUrlParams, initialTimezone);
 
 	let selectedPreset = $state<string | null>(initialUrlParams.preset);
-	let fromDate = $state<CalendarDate>(dateToCalendarDate(initialRange.from, timezone));
-	let toDate = $state<CalendarDate>(dateToCalendarDate(initialRange.to, timezone));
-	let fromTime = $state(dateToTimeString(initialRange.from, timezone));
-	let toTime = $state(dateToTimeString(initialRange.to, timezone));
+	let fromDate = $state<CalendarDate>(dateToCalendarDate(initialRange.from, initialTimezone));
+	let toDate = $state<CalendarDate>(dateToCalendarDate(initialRange.to, initialTimezone));
+	let fromTime = $state(dateToTimeString(initialRange.from, initialTimezone));
+	let toTime = $state(dateToTimeString(initialRange.to, initialTimezone));
 
 	function updateTimeRangeUrl(pushToHistory = true) {
 		updateUrl(

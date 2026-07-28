@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import { browser } from '$app/environment';
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/api';
@@ -10,16 +10,16 @@
 	import { getTimezone } from '$lib/state/timezone.svelte';
 	import { TracewayTableHeader } from '$lib/components/ui/traceway-table-header';
 	import { TableEmptyState } from '$lib/components/ui/table-empty-state';
-	import { PaginationFooter } from '$lib/components/ui/pagination-footer';
 	import { TimeRangePicker } from '$lib/components/ui/time-range-picker';
 	import { SeverityBadge } from '$lib/components/ui/severity-badge';
 	import * as Select from '$lib/components/ui/select';
 	import { Input } from '$lib/components/ui/input';
-	import { Button } from '$lib/components/ui/button';
+	import { Button, buttonVariants } from '$lib/components/ui/button';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
+	import * as Tooltip from '$lib/components/ui/tooltip';
 	import ExpandedLogRow from '$lib/components/trace-logs/expanded-log-row.svelte';
 	import LogMessage from '$lib/components/trace-logs/log-message.svelte';
-	import { Plus, X } from '@lucide/svelte';
+	import { Check, Play, Plus, X } from '@lucide/svelte';
 	import { CalendarDate } from '@internationalized/date';
 	import {
 		parseTimeRangeFromUrl,
@@ -37,6 +37,7 @@
 	} from '$lib/utils/sort-storage';
 
 	const timezone = $derived(getTimezone());
+	const initialTimezone = getTimezone();
 
 	const SORT_STORAGE_KEY = 'logs';
 	const initialSort = getSortState(SORT_STORAGE_KEY, { field: 'timestamp', direction: 'desc' });
@@ -68,10 +69,116 @@
 	let error = $state('');
 	let expandedId = $state<string | null>(null);
 
-	let page = $state(1);
-	let pageSize = $state(50);
+	const pageSize = 50;
+	// total counts the fixed history window (lastFromISO..lastToISO) as reported
+	// by the backend; liveExtra counts live-prepended rows newer than lastToISO.
+	// Keeping them separate stops loadMore's total refresh from erasing the live
+	// rows out of "Showing X of Y".
 	let total = $state(0);
-	let totalPages = $state(0);
+	let liveExtra = $state(0);
+	const displayTotal = $derived(total + liveExtra);
+	let loadedPages = 1;
+	let loadingMore = $state(false);
+	let loadMoreError = $state('');
+
+	type LogsResponse = { data: LogRecord[]; pagination: { total: number; totalPages: number } };
+
+	// Live tail mode: poll only the diff since the last poll and prepend it.
+	const LIVE_POLL_MS = 5000;
+	// Re-query a little of the already-covered window each poll so records that
+	// arrive late (SDK batching) aren't missed; dedup by id drops the overlap.
+	const LIVE_OVERLAP_MS = 10_000;
+	// Every LIVE_CATCHUP_EVERY-th poll widens the overlap to sweep up records
+	// that arrived later than the regular overlap covers (SDK upload retries,
+	// OTel batch exporters, client clock skew). Widening only periodically
+	// keeps the steady-state poll response small: the wide window is shipped
+	// once per sweep interval instead of on every poll, and dedup by id drops
+	// everything already loaded.
+	const LIVE_CATCHUP_OVERLAP_MS = 60_000;
+	const LIVE_CATCHUP_EVERY = 6;
+	// Polls fetch a large page so a burst between polls doesn't outrun the
+	// window; when even that page is entirely new rows, livePoll gives up on
+	// continuity and replaces the buffer (see below).
+	const LIVE_PAGE_SIZE = 500;
+	// Cap the buffer so a long-running live session can't grow the DOM forever.
+	const MAX_ROWS = 2000;
+	let live = $state(false);
+	let liveTimer: ReturnType<typeof setInterval> | null = null;
+	let pollBusy = false;
+	let liveSinceMs = 0;
+	let livePollCount = 0;
+	// Time range used by the last full load. loadMore and livePoll reuse it so
+	// page offsets stay stable while the wall clock moves.
+	let lastFromISO = '';
+	let lastToISO = '';
+	let lastFilterBody: ReturnType<typeof currentFilterBody> | null = null;
+	let requestGen = 0;
+
+	// Windowed rendering: only rows near the viewport are mounted, spacer rows
+	// keep the scrollbar honest. Row height is measured from the first rendered
+	// row; the (single) expanded row's extra height is measured separately and
+	// folded into the offset math piecewise. INVARIANT: every collapsed row must
+	// render at the same height — all cells truncate to one line today; a cell
+	// that wraps would desync the spacer math and make the scrollbar drift.
+	const OVERSCAN = 10;
+	let scrollEl = $state<HTMLDivElement | null>(null);
+	let scrollTop = $state(0);
+	let viewportH = $state(600);
+	let rowH = $state(44);
+	let expandedHeight = $state(0);
+
+	const expandedIndex = $derived(expandedId ? logs.findIndex((l) => l.id === expandedId) : -1);
+
+	function offsetOf(i: number): number {
+		return i * rowH + (expandedIndex >= 0 && i > expandedIndex ? expandedHeight : 0);
+	}
+
+	function indexAt(y: number): number {
+		if (expandedIndex < 0) return Math.floor(y / rowH);
+		const afterExpandedTop = (expandedIndex + 1) * rowH + expandedHeight;
+		if (y < (expandedIndex + 1) * rowH) return Math.floor(y / rowH);
+		if (y < afterExpandedTop) return expandedIndex;
+		return expandedIndex + 1 + Math.floor((y - afterExpandedTop) / rowH);
+	}
+
+	const winStart = $derived(Math.max(0, indexAt(scrollTop) - OVERSCAN));
+	const winEnd = $derived(Math.min(logs.length, indexAt(scrollTop + viewportH) + 1 + OVERSCAN));
+	const topPad = $derived(offsetOf(winStart));
+	const bottomPad = $derived(Math.max(0, offsetOf(logs.length) - offsetOf(winEnd)));
+	const visibleLogs = $derived(logs.slice(winStart, winEnd));
+
+	// Size the scroll container so the table ends at the bottom of the viewport
+	// instead of overflowing the page. max-height (not height) so a short result
+	// list doesn't leave a stretched empty table.
+	function updateMaxHeight() {
+		if (!scrollEl) return;
+		const top = scrollEl.getBoundingClientRect().top;
+		scrollEl.style.maxHeight = `${Math.max(240, window.innerHeight - top - 24)}px`;
+	}
+
+	$effect(() => {
+		// Anything that can move the table's top edge (wrapping filter pills,
+		// loading states) should trigger a re-measure.
+		void metaFilterChips.length;
+		void attributeFilters.length;
+		void loading;
+		updateMaxHeight();
+	});
+
+	$effect(() => {
+		void logs.length;
+		void expandedId;
+		if (!scrollEl) return;
+		const first = scrollEl.querySelector('tr[data-log-id]') as HTMLElement | null;
+		if (first && first.offsetHeight > 0) rowH = first.offsetHeight;
+		if (expandedId) {
+			const main = scrollEl.querySelector(`tr[data-log-id="${CSS.escape(expandedId)}"]`);
+			const expanded = main?.nextElementSibling as HTMLElement | null;
+			if (expanded) expandedHeight = expanded.offsetHeight;
+		} else {
+			expandedHeight = 0;
+		}
+	});
 
 	type AttributeFilter = {
 		scope: 'resource' | 'scope' | 'log';
@@ -141,13 +248,13 @@
 	}
 
 	const initialUrlParams = parseLogsUrlParams();
-	const initialRange = getResolvedTimeRange(initialUrlParams, timezone);
+	const initialRange = getResolvedTimeRange(initialUrlParams, initialTimezone);
 
 	let selectedPreset = $state<string | null>(initialUrlParams.preset);
-	let fromDate = $state<CalendarDate>(dateToCalendarDate(initialRange.from, timezone));
-	let toDate = $state<CalendarDate>(dateToCalendarDate(initialRange.to, timezone));
-	let fromTime = $state(dateToTimeString(initialRange.from, timezone));
-	let toTime = $state(dateToTimeString(initialRange.to, timezone));
+	let fromDate = $state<CalendarDate>(dateToCalendarDate(initialRange.from, initialTimezone));
+	let toDate = $state<CalendarDate>(dateToCalendarDate(initialRange.to, initialTimezone));
+	let fromTime = $state(dateToTimeString(initialRange.from, initialTimezone));
+	let toTime = $state(dateToTimeString(initialRange.to, initialTimezone));
 
 	let searchQuery = $state(initialUrlParams.search);
 	let searchType = $state(initialUrlParams.searchType);
@@ -163,24 +270,58 @@
 	let addFilterOpen = $state(false);
 	let dialogKey = $state('');
 	let dialogValue = $state('');
+	let dialogExclude = $state(false);
 	let dialogError = $state('');
+	// Index into attributeFilters when editing an existing pill, null when adding.
+	let dialogEditIndex = $state<number | null>(null);
 
 	function openAddFilterDialog() {
 		dialogKey = '';
 		dialogValue = '';
+		dialogExclude = false;
 		dialogError = '';
+		dialogEditIndex = null;
+		addFilterOpen = true;
+	}
+
+	function openEditFilterDialog(index: number) {
+		const f = attributeFilters[index];
+		dialogKey = `${f.scope}.${f.key}`;
+		dialogValue = f.value;
+		dialogExclude = f.exclude;
+		dialogError = '';
+		dialogEditIndex = index;
 		addFilterOpen = true;
 	}
 
 	function submitDialogFilter() {
-		const composed = `${dialogKey.trim()}=${dialogValue}`;
+		const composed = `${dialogKey.trim()}${dialogExclude ? '!=' : '='}${dialogValue}`;
 		const parsed = parseAttributeFilter(composed);
 		if (!parsed) {
 			dialogError = 'Key must start with resource., scope., or log.';
 			return;
 		}
-		addAttributeFilter(parsed);
+		if (dialogEditIndex !== null) {
+			updateAttributeFilter(dialogEditIndex, parsed);
+		} else {
+			addAttributeFilter(parsed);
+		}
 		addFilterOpen = false;
+	}
+
+	function updateAttributeFilter(index: number, filter: AttributeFilter) {
+		const dup = attributeFilters.some(
+			(f, i) =>
+				i !== index &&
+				f.scope === filter.scope &&
+				f.key === filter.key &&
+				f.value === filter.value &&
+				f.exclude === filter.exclude
+		);
+		attributeFilters = dup
+			? attributeFilters.filter((_, i) => i !== index)
+			: attributeFilters.map((f, i) => (i === index ? filter : f));
+		loadData(true);
 	}
 
 	function addAttributeFilter(filter: AttributeFilter) {
@@ -194,7 +335,6 @@
 		if (!dup) {
 			attributeFilters = [...attributeFilters, filter];
 		}
-		page = 1;
 		loadData(true);
 	}
 
@@ -234,7 +374,6 @@
 		} else {
 			attributeFilters = attributeFilters.filter((_, i) => i !== existing);
 		}
-		page = 1;
 		loadData(true);
 	}
 
@@ -272,7 +411,6 @@
 				scopeNameFilter = active ? '' : value;
 				break;
 		}
-		page = 1;
 		loadData(true);
 	}
 
@@ -362,13 +500,29 @@
 
 	function removeAttributeFilter(index: number) {
 		attributeFilters = attributeFilters.filter((_, i) => i !== index);
-		page = 1;
 		loadData(true);
 	}
 
+	function currentFilterBody() {
+		return {
+			search: searchQuery.trim(),
+			searchType,
+			minSeverity,
+			serviceName: serviceName.trim(),
+			traceId: traceIdFilter.trim(),
+			spanId: spanIdFilter.trim(),
+			scopeName: scopeNameFilter.trim(),
+			body: bodyFilter,
+			attributeFilters
+		};
+	}
+
 	async function loadData(pushToHistory = true) {
+		const gen = ++requestGen;
 		loading = true;
 		error = '';
+		loadMoreError = '';
+		loadedPages = 1;
 
 		if (selectedPreset) {
 			const range = getTimeRangeFromPreset(selectedPreset, timezone);
@@ -381,49 +535,174 @@
 		updateLogsUrl(pushToHistory);
 
 		try {
+			lastFromISO = getFromDateTimeUTC();
+			lastToISO = getToDateTimeUTC();
+			lastFilterBody = currentFilterBody();
 			const requestBody = {
-				fromDate: getFromDateTimeUTC(),
-				toDate: getToDateTimeUTC(),
+				fromDate: lastFromISO,
+				toDate: lastToISO,
 				orderBy: sortField,
 				sortDirection,
-				pagination: { page, pageSize },
-				search: searchQuery.trim(),
-				searchType,
-				minSeverity,
-				serviceName: serviceName.trim(),
-				traceId: traceIdFilter.trim(),
-				spanId: spanIdFilter.trim(),
-				scopeName: scopeNameFilter.trim(),
-				body: bodyFilter,
-				attributeFilters
+				pagination: { page: 1, pageSize },
+				...lastFilterBody
 			};
 
 			const response = (await api.post('/logs', requestBody, {
 				projectId: projectsState.currentProjectId ?? undefined
-			})) as { data: LogRecord[]; pagination: { total: number; totalPages: number } };
+			})) as LogsResponse;
 
+			if (gen !== requestGen) return;
 			logs = response.data || [];
 			total = response.pagination.total;
-			totalPages = response.pagination.totalPages;
+			liveExtra = 0;
+			scrollEl?.scrollTo({ top: 0 });
+			scrollTop = 0;
 		} catch (e: any) {
+			if (gen !== requestGen) return;
 			console.error(e);
 			error = e.message || 'Failed to load logs';
 		} finally {
-			loading = false;
+			if (gen === requestGen) loading = false;
 		}
 	}
 
-	function handlePageChange(newPage: number) {
-		if (newPage >= 1 && newPage <= totalPages) {
-			page = newPage;
-			loadData(true);
+	async function loadMore() {
+		if (loadingMore || loading) return;
+		const gen = requestGen;
+		loadingMore = true;
+		loadMoreError = '';
+		try {
+			const requestBody = {
+				fromDate: lastFromISO,
+				toDate: lastToISO,
+				orderBy: sortField,
+				sortDirection,
+				pagination: { page: loadedPages + 1, pageSize },
+				...(lastFilterBody ?? currentFilterBody())
+			};
+
+			const response = (await api.post('/logs', requestBody, {
+				projectId: projectsState.currentProjectId ?? undefined
+			})) as LogsResponse;
+
+			if (gen !== requestGen) return;
+			// Live-prepended rows shift page offsets, so drop anything already loaded.
+			const seen = new Set(logs.map((l) => l.id));
+			const fresh = (response.data || []).filter((l) => !seen.has(l.id));
+			logs = [...logs, ...fresh];
+			loadedPages += 1;
+			total = response.pagination.total;
+		} catch (e: any) {
+			console.error(e);
+			loadMoreError = e.message || 'Failed to load more logs';
+		} finally {
+			loadingMore = false;
 		}
 	}
 
-	function handlePageSizeChange(newPageSize: number) {
-		pageSize = newPageSize;
-		page = 1;
+	async function livePoll() {
+		if (pollBusy || loading || document.hidden) return;
+		const gen = requestGen;
+		pollBusy = true;
+		try {
+			const nowMs = Date.now();
+			livePollCount += 1;
+			const overlap =
+				livePollCount % LIVE_CATCHUP_EVERY === 0 ? LIVE_CATCHUP_OVERLAP_MS : LIVE_OVERLAP_MS;
+			const toISO = new Date(nowMs).toISOString();
+			const response = (await api.post(
+				'/logs',
+				{
+					fromDate: new Date(liveSinceMs - overlap).toISOString(),
+					toDate: toISO,
+					orderBy: 'timestamp',
+					sortDirection: 'desc',
+					pagination: { page: 1, pageSize: LIVE_PAGE_SIZE },
+					...(lastFilterBody ?? currentFilterBody())
+				},
+				{ projectId: projectsState.currentProjectId ?? undefined }
+			)) as LogsResponse;
+
+			if (gen !== requestGen) return;
+			const seen = new Set(logs.map((l) => l.id));
+			const fresh = (response.data || []).filter((l) => !seen.has(l.id));
+			if (fresh.length === LIVE_PAGE_SIZE) {
+				// Every returned row is unseen: ingestion outran the poll window
+				// and there is a gap between the response and the loaded buffer.
+				// Restart the view from the newest rows instead of prepending
+				// across a hole. Moving lastToISO up and treating the buffer as
+				// the first LIVE_PAGE_SIZE/pageSize pages keeps "Load more"
+				// offsets aligned with the new tail. The poll-window total
+				// undercounts the widened history window; the next loadMore
+				// refreshes it.
+				logs = response.data;
+				total = response.pagination.total;
+				liveExtra = 0;
+				lastToISO = toISO;
+				loadedPages = LIVE_PAGE_SIZE / pageSize;
+				scrollEl?.scrollTo({ top: 0 });
+				scrollTop = 0;
+			} else if (fresh.length > 0) {
+				const merged = [...fresh, ...logs];
+				if (merged.length > MAX_ROWS) {
+					// Outside the replace branch the buffer is a contiguous
+					// newest-first run, so after truncation it is exactly the
+					// newest MAX_ROWS of (lastFromISO, toISO]. Re-anchor the
+					// "Load more" window to that tail so the next page follows
+					// it instead of leaving a hole where the dropped rows were.
+					logs = merged.slice(0, MAX_ROWS);
+					lastToISO = toISO;
+					loadedPages = MAX_ROWS / pageSize;
+					total += liveExtra + fresh.length;
+					liveExtra = 0;
+				} else {
+					logs = merged;
+					liveExtra += fresh.length;
+				}
+				// Keep the rows the user is looking at pinned in place while
+				// new rows grow the list above them; at the very top, stay
+				// pinned to the newest row instead.
+				if (scrollTop > 0 && scrollEl) {
+					const target = scrollTop + fresh.length * rowH;
+					tick().then(() => {
+						if (!scrollEl) return;
+						scrollEl.scrollTop = target;
+						scrollTop = scrollEl.scrollTop;
+					});
+				}
+			}
+			liveSinceMs = nowMs;
+		} catch (e) {
+			console.error(e);
+		} finally {
+			pollBusy = false;
+		}
+	}
+
+	function toggleLive() {
+		if (live) {
+			stopLive();
+			return;
+		}
+		// Live tail only makes sense newest-first: clear any custom sort.
+		if (sortField !== 'timestamp' || sortDirection !== 'desc') {
+			sortField = 'timestamp';
+			sortDirection = 'desc';
+			setSortState(SORT_STORAGE_KEY, { field: sortField, direction: sortDirection });
+		}
+		live = true;
+		liveSinceMs = Date.now();
+		livePollCount = 0;
 		loadData(true);
+		liveTimer = setInterval(livePoll, LIVE_POLL_MS);
+	}
+
+	function stopLive() {
+		live = false;
+		if (liveTimer) {
+			clearInterval(liveTimer);
+			liveTimer = null;
+		}
 	}
 
 	function handleTimeRangeChange(
@@ -436,12 +715,12 @@
 		fromTime = from.time;
 		toTime = to.time;
 		selectedPreset = preset;
-		page = 1;
+		// A custom range is a fixed window in the past; there is nothing to tail.
+		if (!preset && live) stopLive();
 		loadData(true);
 	}
 
 	function handleSearch() {
-		page = 1;
 		loadData(true);
 	}
 
@@ -453,17 +732,21 @@
 	}
 
 	function handleSort(field: string) {
+		// Live tail is pinned to newest-first; sorting drops back to history mode.
+		if (live) stopLive();
 		const newSort = handleSortClick(field, sortField, sortDirection);
 		sortField = newSort.field;
 		sortDirection = newSort.direction;
 		setSortState(SORT_STORAGE_KEY, newSort);
-		page = 1;
 		loadData(true);
 	}
 
 	function handlePopState() {
 		const urlParams = parseLogsUrlParams();
 		const range = getResolvedTimeRange(urlParams, timezone);
+		const storedSort = getSortState(SORT_STORAGE_KEY, { field: 'timestamp', direction: 'desc' });
+		sortField = storedSort.field;
+		sortDirection = storedSort.direction;
 		selectedPreset = urlParams.preset;
 		fromDate = dateToCalendarDate(range.from, timezone);
 		toDate = dateToCalendarDate(range.to, timezone);
@@ -478,7 +761,7 @@
 		scopeNameFilter = urlParams.scopeName;
 		bodyFilter = urlParams.body;
 		attributeFilters = urlParams.attributeFilters;
-		page = 1;
+		if (!urlParams.preset && live) stopLive();
 		loadData(false);
 	}
 
@@ -488,12 +771,15 @@
 
 	onMount(() => {
 		window.addEventListener('popstate', handlePopState);
+		window.addEventListener('resize', updateMaxHeight);
 		loadData(false);
 	});
 
 	onDestroy(() => {
+		stopLive();
 		if (typeof window !== 'undefined') {
 			window.removeEventListener('popstate', handlePopState);
+			window.removeEventListener('resize', updateMaxHeight);
 		}
 	});
 </script>
@@ -501,7 +787,37 @@
 <div class="space-y-4">
 	<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 		<h2 class="text-3xl font-semibold tracking-tight">Logs</h2>
-		<div class="w-full sm:w-auto">
+		<div class="flex w-full items-center gap-2 sm:w-auto">
+			{#if selectedPreset === null}
+				<Tooltip.Root>
+					<!-- buttonVariants sets aria-disabled:pointer-events-none, which would
+					     swallow hover and prevent this tooltip from ever opening. -->
+					<Tooltip.Trigger
+						class="{buttonVariants({
+							variant: 'outline'
+						})} shrink-0 !pointer-events-auto !cursor-not-allowed opacity-50"
+						aria-disabled="true"
+					>
+						<Play class="h-4 w-4" />
+						Live
+					</Tooltip.Trigger>
+					<Tooltip.Content>
+						Live follows the current time, so it's unavailable with a custom time range. Pick a
+						preset like "24 hours" to tail logs.
+					</Tooltip.Content>
+				</Tooltip.Root>
+			{:else}
+				<Button
+					variant={live ? 'default' : 'outline'}
+					class="shrink-0"
+					aria-pressed={live}
+					title={live ? 'Stop live tail' : 'Tail new logs in realtime'}
+					onclick={toggleLive}
+				>
+					<Play class="h-4 w-4 {live ? 'fill-current' : ''}" />
+					Live
+				</Button>
+			{/if}
 			<TimeRangePicker
 				bind:fromDate
 				bind:toDate
@@ -553,13 +869,18 @@
 		</button>
 		{#each metaFilterChips as chip (chip.field)}
 			<span class="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-mono">
-				<span class="text-muted-foreground">{chip.label}</span>
-				<span>=</span>
-				<span title={chip.value}>{shortenChipValue(chip.value)}</span>
+				<Tooltip.Root>
+					<Tooltip.Trigger class="inline-flex cursor-default items-center gap-1">
+						<span class="text-muted-foreground">{chip.label}</span>
+						<span>=</span>
+						<span>{shortenChipValue(chip.value)}</span>
+					</Tooltip.Trigger>
+					<Tooltip.Content>Not editable</Tooltip.Content>
+				</Tooltip.Root>
 				<button
 					type="button"
 					aria-label="Remove filter"
-					class="ml-1 text-muted-foreground hover:text-foreground"
+					class="ml-1 cursor-pointer text-muted-foreground hover:text-foreground"
 					onclick={() => toggleMetaFilter(chip.field, chip.value)}
 				>
 					<X class="h-3 w-3" />
@@ -570,13 +891,20 @@
 			<span
 				class="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-mono"
 			>
-				<span class="text-muted-foreground">{f.scope}.{f.key}</span>
-				<span class={f.exclude ? 'text-red-500' : ''}>{f.exclude ? '!=' : '='}</span>
-				<span>{f.value}</span>
+				<button
+					type="button"
+					aria-label="Edit filter"
+					class="inline-flex cursor-pointer items-center gap-1 hover:text-primary"
+					onclick={() => openEditFilterDialog(i)}
+				>
+					<span class="text-muted-foreground">{f.scope}.{f.key}</span>
+					<span class={f.exclude ? 'text-red-500' : ''}>{f.exclude ? '!=' : '='}</span>
+					<span>{f.value}</span>
+				</button>
 				<button
 					type="button"
 					aria-label="Remove filter"
-					class="ml-1 text-muted-foreground hover:text-foreground"
+					class="ml-1 cursor-pointer text-muted-foreground hover:text-foreground"
 					onclick={() => removeAttributeFilter(i)}
 				>
 					<X class="h-3 w-3" />
@@ -588,7 +916,9 @@
 	<AlertDialog.Root open={addFilterOpen} onOpenChange={(open) => (addFilterOpen = open)}>
 		<AlertDialog.Content>
 			<AlertDialog.Header>
-				<AlertDialog.Title>Add attribute filter</AlertDialog.Title>
+				<AlertDialog.Title>
+					{dialogEditIndex !== null ? 'Edit attribute filter' : 'Add attribute filter'}
+				</AlertDialog.Title>
 				<AlertDialog.Description>
 					Attribute keys must start with <code class="font-mono">resource.</code>,
 					<code class="font-mono">scope.</code>, or <code class="font-mono">log.</code>.
@@ -603,6 +933,31 @@
 						onkeydown={handleDialogKeydown}
 					/>
 				</label>
+				<div class="flex flex-col gap-1 text-sm">
+					<span class="font-medium">Operator</span>
+					<div class="flex">
+						<button
+							type="button"
+							aria-pressed={!dialogExclude}
+							class="flex-1 rounded-l-md border px-3 py-2 text-sm transition-colors {!dialogExclude
+								? 'z-10 border-primary bg-primary font-semibold text-primary-foreground'
+								: 'border-input text-muted-foreground hover:text-foreground'}"
+							onclick={() => (dialogExclude = false)}
+						>
+							<span class="font-mono">=</span> Equals
+						</button>
+						<button
+							type="button"
+							aria-pressed={dialogExclude}
+							class="-ml-px flex-1 rounded-r-md border px-3 py-2 text-sm transition-colors {dialogExclude
+								? 'z-10 border-primary bg-primary font-semibold text-primary-foreground'
+								: 'border-input text-muted-foreground hover:text-foreground'}"
+							onclick={() => (dialogExclude = true)}
+						>
+							<span class="font-mono">≠</span> Not equals
+						</button>
+					</div>
+				</div>
 				<label class="flex flex-col gap-1 text-sm">
 					<span class="font-medium">Value</span>
 					<Input
@@ -618,13 +973,23 @@
 			<AlertDialog.Footer>
 				<Button variant="outline" onclick={() => (addFilterOpen = false)}>Cancel</Button>
 				<Button onclick={submitDialogFilter}>
-					<Plus class="h-4 w-4" /> Add filter
+					{#if dialogEditIndex !== null}
+						<Check class="h-4 w-4" /> Update filter
+					{:else}
+						<Plus class="h-4 w-4" /> Add filter
+					{/if}
 				</Button>
 			</AlertDialog.Footer>
 		</AlertDialog.Content>
 	</AlertDialog.Root>
 
 	<div class="overflow-hidden rounded-md border">
+		<div
+			bind:this={scrollEl}
+			bind:clientHeight={viewportH}
+			onscroll={() => (scrollTop = scrollEl?.scrollTop ?? 0)}
+			class="overflow-auto [&_[data-slot=table-container]]:overflow-visible"
+		>
 		<Table.Root>
 			{#if loading}
 				<Table.Body>
@@ -649,7 +1014,10 @@
 					<TableEmptyState colspan={5} message="No logs found." />
 				</Table.Body>
 			{:else}
-				<Table.Header>
+				<!-- Solid thead bg so rows can't show through the translucent th
+				     bg-muted/60 while it is sticky; the th keeps its own darker
+				     background on top, same look as the endpoints table. -->
+				<Table.Header class="sticky top-0 z-10 bg-background">
 					<Table.Row>
 						<TracewayTableHeader
 							label="Timestamp"
@@ -687,8 +1055,12 @@
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
-					{#each logs as log (log.id)}
+					{#if topPad > 0}
+						<tr aria-hidden="true" style="height: {topPad}px"></tr>
+					{/if}
+					{#each visibleLogs as log (log.id)}
 						<Table.Row
+							data-log-id={log.id}
 							class="group cursor-pointer hover:bg-muted/50"
 							onclick={() => toggleExpanded(log.id)}
 						>
@@ -728,19 +1100,29 @@
 							/>
 						{/if}
 					{/each}
+					{#if bottomPad > 0}
+						<tr aria-hidden="true" style="height: {bottomPad}px"></tr>
+					{/if}
+					<Table.Row class="hover:bg-transparent">
+						<Table.Cell colspan={5}>
+							<div class="flex items-center justify-center gap-3 py-1">
+								{#if logs.length < displayTotal}
+									<Button variant="outline" size="sm" onclick={loadMore} disabled={loadingMore}>
+										{loadingMore ? 'Loading…' : `Load ${pageSize} more`}
+									</Button>
+								{/if}
+								{#if loadMoreError}
+									<span class="text-xs text-red-500">{loadMoreError}</span>
+								{/if}
+								<span class="text-xs text-muted-foreground">
+									Showing {logs.length.toLocaleString()} of {displayTotal.toLocaleString()} logs
+								</span>
+							</div>
+						</Table.Cell>
+					</Table.Row>
 				</Table.Body>
 			{/if}
 		</Table.Root>
+		</div>
 	</div>
-
-	<PaginationFooter
-		currentPage={page}
-		{totalPages}
-		{pageSize}
-		totalItems={total}
-		onPageChange={handlePageChange}
-		onPageSizeChange={handlePageSizeChange}
-		{loading}
-		itemLabel="log"
-	/>
 </div>

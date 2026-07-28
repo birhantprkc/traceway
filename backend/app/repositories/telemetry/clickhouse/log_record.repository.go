@@ -100,7 +100,7 @@ func (r *logRecordRepository) Search(ctx context.Context, params shared.LogSearc
 		scope_schema_url, scope_name, scope_version, scope_attributes,
 		log_attributes
 	FROM log_records
-	WHERE ` + where + ` ORDER BY ` + orderBy + ` ` + direction + ` LIMIT ? OFFSET ?`
+	WHERE ` + where + ` ORDER BY ` + orderBy + ` ` + direction + `, id LIMIT ? OFFSET ?`
 
 	args = append(args, params.PageSize, offset)
 

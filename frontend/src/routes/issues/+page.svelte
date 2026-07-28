@@ -36,6 +36,7 @@
 	import Button from '$lib/components/ui/button/button.svelte';
 
 	const timezone = $derived(getTimezone());
+	const initialTimezone = getTimezone();
 
 	// Sort state (persisted to localStorage)
 	const SORT_STORAGE_KEY = 'issues';
@@ -90,14 +91,14 @@
 	}
 
 	const initialUrlParams = parseIssuesUrlParams();
-	const initialRange = getResolvedTimeRange(initialUrlParams, timezone);
+	const initialRange = getResolvedTimeRange(initialUrlParams, initialTimezone);
 
 	// Time range state
 	let selectedPreset = $state<string | null>(initialUrlParams.preset);
-	let fromDate = $state<CalendarDate>(dateToCalendarDate(initialRange.from, timezone));
-	let toDate = $state<CalendarDate>(dateToCalendarDate(initialRange.to, timezone));
-	let fromTime = $state(dateToTimeString(initialRange.from, timezone));
-	let toTime = $state(dateToTimeString(initialRange.to, timezone));
+	let fromDate = $state<CalendarDate>(dateToCalendarDate(initialRange.from, initialTimezone));
+	let toDate = $state<CalendarDate>(dateToCalendarDate(initialRange.to, initialTimezone));
+	let fromTime = $state(dateToTimeString(initialRange.from, initialTimezone));
+	let toTime = $state(dateToTimeString(initialRange.to, initialTimezone));
 
 	// Search state (manual trigger only)
 	let searchQuery = $state(initialUrlParams.search);
