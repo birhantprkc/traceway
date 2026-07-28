@@ -155,7 +155,7 @@ func (r *logRecordRepository) Search(ctx context.Context, params shared.LogSearc
 		log_attributes
 	FROM log_records
 	WHERE %s
-	ORDER BY %s %s
+	ORDER BY %s %s, id
 	LIMIT :limit OFFSET :offset`, where, orderBy, direction)
 
 	rows, err := lit.SelectNamed[logRecord](db.TelemetryDB, query, args)

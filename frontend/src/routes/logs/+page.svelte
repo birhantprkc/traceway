@@ -82,12 +82,25 @@
 	// Re-query a little of the already-covered window each poll so records that
 	// arrive late (SDK batching) aren't missed; dedup by id drops the overlap.
 	const LIVE_OVERLAP_MS = 10_000;
+	// Every LIVE_CATCHUP_EVERY-th poll widens the overlap to sweep up records
+	// that arrived later than the regular overlap covers (SDK upload retries,
+	// OTel batch exporters, client clock skew). Widening only periodically
+	// keeps the steady-state poll response small: the wide window is shipped
+	// once per sweep interval instead of on every poll, and dedup by id drops
+	// everything already loaded.
+	const LIVE_CATCHUP_OVERLAP_MS = 60_000;
+	const LIVE_CATCHUP_EVERY = 6;
+	// Polls fetch a large page so a burst between polls doesn't outrun the
+	// window; when even that page is entirely new rows, livePoll gives up on
+	// continuity and replaces the buffer (see below).
+	const LIVE_PAGE_SIZE = 500;
 	// Cap the buffer so a long-running live session can't grow the DOM forever.
 	const MAX_ROWS = 2000;
 	let live = $state(false);
 	let liveTimer: ReturnType<typeof setInterval> | null = null;
 	let pollBusy = false;
 	let liveSinceMs = 0;
+	let livePollCount = 0;
 	// Time range used by the last full load. loadMore and livePoll reuse it so
 	// page offsets stay stable while the wall clock moves.
 	let lastFromISO = '';
@@ -583,14 +596,18 @@
 		pollBusy = true;
 		try {
 			const nowMs = Date.now();
+			livePollCount += 1;
+			const overlap =
+				livePollCount % LIVE_CATCHUP_EVERY === 0 ? LIVE_CATCHUP_OVERLAP_MS : LIVE_OVERLAP_MS;
+			const toISO = new Date(nowMs).toISOString();
 			const response = (await api.post(
 				'/logs',
 				{
-					fromDate: new Date(liveSinceMs - LIVE_OVERLAP_MS).toISOString(),
-					toDate: new Date(nowMs).toISOString(),
+					fromDate: new Date(liveSinceMs - overlap).toISOString(),
+					toDate: toISO,
 					orderBy: 'timestamp',
 					sortDirection: 'desc',
-					pagination: { page: 1, pageSize },
+					pagination: { page: 1, pageSize: LIVE_PAGE_SIZE },
 					...(lastFilterBody ?? currentFilterBody())
 				},
 				{ projectId: projectsState.currentProjectId ?? undefined }
@@ -599,7 +616,20 @@
 			if (gen !== requestGen) return;
 			const seen = new Set(logs.map((l) => l.id));
 			const fresh = (response.data || []).filter((l) => !seen.has(l.id));
-			if (fresh.length > 0) {
+			if (fresh.length === LIVE_PAGE_SIZE) {
+				// Every returned row is unseen: ingestion outran the poll window
+				// and there is a gap between the response and the loaded buffer.
+				// Restart the view from the newest rows instead of prepending
+				// across a hole. Moving lastToISO up and treating the buffer as
+				// the first LIVE_PAGE_SIZE/pageSize pages keeps "Load more"
+				// offsets aligned with the new tail.
+				logs = response.data;
+				total = response.pagination.total;
+				lastToISO = toISO;
+				loadedPages = LIVE_PAGE_SIZE / pageSize;
+				scrollEl?.scrollTo({ top: 0 });
+				scrollTop = 0;
+			} else if (fresh.length > 0) {
 				logs = [...fresh, ...logs].slice(0, MAX_ROWS);
 				total += fresh.length;
 			}
@@ -624,6 +654,7 @@
 		}
 		live = true;
 		liveSinceMs = Date.now();
+		livePollCount = 0;
 		loadData(true);
 		liveTimer = setInterval(livePoll, LIVE_POLL_MS);
 	}
