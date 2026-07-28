@@ -48,6 +48,7 @@
 	import type { DiscoveredMetric } from '$lib/types/dashboard';
 
 	const timezone = $derived(getTimezone());
+	const initialTimezone = getTimezone();
 
 	type Widget = {
 		id: string;
@@ -148,14 +149,14 @@
 	let updatedEl = $state<HTMLElement | null>(null);
 	let hasOverflow = $state(false);
 
-	const initialUrlParams = parseTimeRangeFromUrl(timezone);
-	const initialRange = getResolvedTimeRange(initialUrlParams, timezone);
+	const initialUrlParams = parseTimeRangeFromUrl(initialTimezone);
+	const initialRange = getResolvedTimeRange(initialUrlParams, initialTimezone);
 
 	let selectedPreset = $state<string | null>(initialUrlParams.preset ?? '24h');
-	let fromDate = $state<CalendarDate>(dateToCalendarDate(initialRange.from, timezone));
-	let toDate = $state<CalendarDate>(dateToCalendarDate(initialRange.to, timezone));
-	let fromTime = $state(dateToTimeString(initialRange.from, timezone));
-	let toTime = $state(dateToTimeString(initialRange.to, timezone));
+	let fromDate = $state<CalendarDate>(dateToCalendarDate(initialRange.from, initialTimezone));
+	let toDate = $state<CalendarDate>(dateToCalendarDate(initialRange.to, initialTimezone));
+	let fromTime = $state(dateToTimeString(initialRange.from, initialTimezone));
+	let toTime = $state(dateToTimeString(initialRange.to, initialTimezone));
 	let sharedTimeDomain = $state<[Date, Date] | null>(null);
 
 	const lastUpdatedFormatted = $derived(
@@ -937,7 +938,7 @@
 	// zone once projects finish loading. The wall-clock range state above was
 	// materialized under the old zone; re-resolve the preset under the new one
 	// or every widget query shifts by the offset difference.
-	let lastResolvedTimezone = timezone;
+	let lastResolvedTimezone = getTimezone();
 	$effect(() => {
 		const tz = timezone;
 		if (tz === lastResolvedTimezone) return;

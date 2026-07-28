@@ -59,20 +59,23 @@
 		onCancel: () => void;
 	}>();
 
-	let title = $state(widget?.title ?? '');
-	let widgetType = $state(widget?.widgetType ?? 'line_chart');
-	let unit = $state(widget?.config?.unit ?? '');
-	let unitManuallySet = $state(!!widget?.config?.unit);
+	// svelte-ignore state_referenced_locally
+	const initialWidget = widget;
+
+	let title = $state(initialWidget?.title ?? '');
+	let widgetType = $state(initialWidget?.widgetType ?? 'line_chart');
+	let unit = $state(initialWidget?.config?.unit ?? '');
+	let unitManuallySet = $state(!!initialWidget?.config?.unit);
 	let sources = $state<WidgetSource[]>(
-		widget?.config?.sources ?? [{ type: 'metric', name: '', aggregation: 'avg' }]
+		initialWidget?.config?.sources ?? [{ type: 'metric', name: '', aggregation: 'avg' }]
 	);
-	let legend = $state<'auto' | 'on' | 'off'>(legendFromConfig(widget?.config));
-	let showSparkline = $state(!!widget?.config?.showSparkline);
-	let gaugeMin = $state(widget?.config?.min != null ? String(widget.config.min) : '0');
-	let gaugeMax = $state(widget?.config?.max != null ? String(widget.config.max) : '100');
-	let baseColor = $state(widget?.config?.baseColor ?? 'green');
+	let legend = $state<'auto' | 'on' | 'off'>(legendFromConfig(initialWidget?.config));
+	let showSparkline = $state(!!initialWidget?.config?.showSparkline);
+	let gaugeMin = $state(initialWidget?.config?.min != null ? String(initialWidget.config.min) : '0');
+	let gaugeMax = $state(initialWidget?.config?.max != null ? String(initialWidget.config.max) : '100');
+	let baseColor = $state(initialWidget?.config?.baseColor ?? 'green');
 	let thresholds = $state<Array<{ value: string; color: string }>>(
-		thresholdsFromConfig(widget?.config, widget?.widgetType)
+		thresholdsFromConfig(initialWidget?.config, initialWidget?.widgetType)
 	);
 
 	$effect(() => {

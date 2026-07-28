@@ -46,6 +46,7 @@
 	import { ChartLine } from '@lucide/svelte';
 
     const timezone = $derived(getTimezone());
+    const initialTimezone = getTimezone();
     const dropHealthyHealthchecks = $derived(projectsState.currentProject?.dropHealthyHealthchecks ?? false);
     const healthcheckPaths = $derived(projectsState.currentProject?.healthcheckPaths ?? []);
 
@@ -115,7 +116,7 @@
 
     // Initialize from URL
     const initialUrlParams = parseEndpointsUrlParams();
-    const initialRange = getResolvedTimeRange(initialUrlParams, timezone);
+    const initialRange = getResolvedTimeRange(initialUrlParams, initialTimezone);
 
     // Search + rootFilter state
     let searchQuery = $state(initialUrlParams.search);
@@ -123,10 +124,10 @@
 
     // Date Range State
     let selectedPreset = $state<string | null>(initialUrlParams.preset);
-    let fromDate = $state<CalendarDate>(dateToCalendarDate(initialRange.from, timezone));
-    let toDate = $state<CalendarDate>(dateToCalendarDate(initialRange.to, timezone));
-    let fromTime = $state(dateToTimeString(initialRange.from, timezone));
-    let toTime = $state(dateToTimeString(initialRange.to, timezone));
+    let fromDate = $state<CalendarDate>(dateToCalendarDate(initialRange.from, initialTimezone));
+    let toDate = $state<CalendarDate>(dateToCalendarDate(initialRange.to, initialTimezone));
+    let fromTime = $state(dateToTimeString(initialRange.from, initialTimezone));
+    let toTime = $state(dateToTimeString(initialRange.to, initialTimezone));
 
     // Update URL with current time range and search
     function updateTimeRangeUrl(pushToHistory = true) {

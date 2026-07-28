@@ -11,7 +11,7 @@
     const organization = $derived(organizationState.currentOrganization);
     const canManage = $derived(organizationState.canManage);
 
-    let selectedTimezone = $state(organization?.timezone || 'UTC');
+    let selectedTimezone = $state(organizationState.currentOrganization?.timezone || 'UTC');
     let saving = $state(false);
 
     $effect(() => {

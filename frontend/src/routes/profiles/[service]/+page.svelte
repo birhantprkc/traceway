@@ -48,6 +48,7 @@
 	import type { FlameGraphNode } from 'd3-flame-graph';
 
 	const timezone = $derived(getTimezone());
+	const initialTimezone = getTimezone();
 
 	let { data } = $props();
 
@@ -82,6 +83,7 @@
 	let downloading = $state(false);
 
 	let availableTypes = $state<ProfileTypeInfo[]>([]);
+	// svelte-ignore state_referenced_locally
 	let activeType = $state(data.type ?? '');
 
 	let tabsListEl = $state<HTMLElement | null>(null);
@@ -127,17 +129,17 @@
 	const initialRange = getInitialRange();
 
 	let selectedPreset = $state<string | null>(initialRange.preset);
-	let fromDate = $state<CalendarDate>(dateToCalendarDate(initialRange.from, timezone));
-	let toDate = $state<CalendarDate>(dateToCalendarDate(initialRange.to, timezone));
-	let fromTime = $state(dateToTimeString(initialRange.from, timezone));
-	let toTime = $state(dateToTimeString(initialRange.to, timezone));
+	let fromDate = $state<CalendarDate>(dateToCalendarDate(initialRange.from, initialTimezone));
+	let toDate = $state<CalendarDate>(dateToCalendarDate(initialRange.to, initialTimezone));
+	let fromTime = $state(dateToTimeString(initialRange.from, initialTimezone));
+	let toTime = $state(dateToTimeString(initialRange.to, initialTimezone));
 
-	const baseInitial = getTimeRangeFromPreset('7d', timezone);
+	const baseInitial = getTimeRangeFromPreset('7d', initialTimezone);
 	let baseSelectedPreset = $state<string | null>('7d');
-	let baseFromDate = $state<CalendarDate>(dateToCalendarDate(baseInitial.from, timezone));
-	let baseToDate = $state<CalendarDate>(dateToCalendarDate(baseInitial.to, timezone));
-	let baseFromTime = $state(dateToTimeString(baseInitial.from, timezone));
-	let baseToTime = $state(dateToTimeString(baseInitial.to, timezone));
+	let baseFromDate = $state<CalendarDate>(dateToCalendarDate(baseInitial.from, initialTimezone));
+	let baseToDate = $state<CalendarDate>(dateToCalendarDate(baseInitial.to, initialTimezone));
+	let baseFromTime = $state(dateToTimeString(baseInitial.from, initialTimezone));
+	let baseToTime = $state(dateToTimeString(baseInitial.to, initialTimezone));
 
 	const activeMeta = $derived<ProfileTypeInfo | undefined>(
 		availableTypes.find((t) => t.type === activeType)

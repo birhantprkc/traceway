@@ -78,6 +78,7 @@
 	let width = $state(0);
 	let chart: FlameGraph | null = null;
 
+	// svelte-ignore state_referenced_locally
 	let inverted = $state(invertedProp);
 
 	const contentHeight = $derived(data ? (flameDepth(data) + 1) * CELL : 0);
