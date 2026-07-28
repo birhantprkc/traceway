@@ -1,0 +1,90 @@
+name: Traceway auto-fix
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  fix:
+    if: github.event.label.name == 'traceway' && github.event.issue.user.login == 'dusanstanojeviccs'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: traceway-fix-${{ github.event.issue.number }}
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Install the Traceway CLI
+        run: curl -fsSL https://cli.tracewayapp.com/install.sh | sh
+
+      - name: Log in to Traceway
+        run: |
+          printf '%s' "${{ secrets.TRACEWAY_TOKEN }}" | \
+            traceway login --url "https://cloud.tracewayapp.com" --token-stdin
+          traceway projects use "${{ vars.TRACEWAY_PROJECT_ID }}"
+
+      - name: Investigate and fix
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          plugin_marketplaces: |
+            https://github.com/tracewayapp/traceway.git
+          plugins: |
+            tw@traceway
+          claude_args: |
+            --model claude-opus-4-8
+            --effort xhigh
+            --allowedTools "Bash(traceway:*),Bash(jq:*),Bash(git:*),Bash(gh:*),Bash(go:*),Read,Edit,Write,Glob,Grep"
+            --max-turns 60
+          prompt: |
+            Traceway detected a production error and opened issue
+            #${{ github.event.issue.number }} in this repository. The full
+            notification is between the markers below.
+
+            --- TRACEWAY NOTIFICATION ---
+            ${{ github.event.issue.title }}
+
+            ${{ github.event.issue.body }}
+            --- END NOTIFICATION ---
+
+            Investigate this with the traceway skill from the tw plugin:
+            invoke the skill and follow its Debug flow, treating the
+            notification above as the issue reference. The skill knows how to
+            extract the Hash, Exception ID, and Occurred-at timestamp from a
+            Traceway notification, resolve the "View details" URL, and drill
+            from the occurrence into traces, sessions, and logs. The traceway
+            CLI is already installed and authenticated against the correct
+            project; never run `traceway login`.
+
+            If the notification contains no Hash (for example a channel test
+            notification), say so in a comment with `gh issue comment` and
+            stop.
+
+            Once the investigation ties the root cause to code in this
+            repository:
+
+            1. Fix the cause, not the symptom. Keep the diff minimal. Run the
+               relevant Go tests for the packages you touch.
+            2. Create a branch named `traceway/fix-<hash>`, commit, push, and
+               open a pull request with `gh pr create`. The PR body must start
+               with "Fixes #${{ github.event.issue.number }}" and include a
+               short root cause analysis plus the "View details" link from the
+               notification.
+            3. After the PR is open, archive the exception:
+               `traceway exceptions archive <hash> --yes`.
+
+            If you cannot tie the root cause to code with confidence, do NOT
+            guess a fix. Comment your full analysis on the issue with
+            `gh issue comment` and stop.
