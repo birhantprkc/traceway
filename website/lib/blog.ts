@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
+import type { Metadata } from "next";
 
 const BLOG_DIR = path.join(process.cwd(), "content", "blog");
 
@@ -14,6 +15,7 @@ export type BlogPostMeta = {
   category: BlogCategory;
   description?: string;
   author?: string;
+  image?: string;
 };
 
 export type BlogPost = BlogPostMeta & {
@@ -33,7 +35,18 @@ function readPostFile(filename: string): BlogPost | null {
   const description =
     typeof data.description === "string" ? data.description : undefined;
   const author = typeof data.author === "string" ? data.author : undefined;
-  return { slug, title, date, version, category, description, author, content };
+  const image = typeof data.image === "string" ? data.image : undefined;
+  return {
+    slug,
+    title,
+    date,
+    version,
+    category,
+    description,
+    author,
+    image,
+    content,
+  };
 }
 
 export function getAllPosts(): BlogPostMeta[] {
@@ -63,14 +76,28 @@ export function postHref(p: { slug: string; category: BlogCategory }): string {
     : `/releases/${p.slug}`;
 }
 
-export function postMetadata(post: BlogPost): {
-  title: string;
-  description: string;
-} {
+export function postMetadata(post: BlogPost): Metadata {
+  const title = `${post.title} · Traceway`;
   const description =
     post.description ??
     (post.category === "engineering"
       ? `${post.title}, from the Traceway engineering blog.`
       : `Release notes for Traceway ${post.title}.`);
-  return { title: `${post.title} · Traceway`, description };
+  if (!post.image) return { title, description };
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: "article",
+      images: [{ url: post.image, width: 1200, height: 630 }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [post.image],
+    },
+  };
 }
