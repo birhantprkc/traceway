@@ -23,15 +23,18 @@ type FiredNotification struct {
 	FiredAt     time.Time
 }
 
-// LogAttributeFilter selects logs by an exact attribute value. Scope is one of
+// LogAttributeFilter selects logs by attribute value. Scope is one of
 // "resource", "scope", or "log"; picks which of the three attribute maps to
 // query (Map columns with bloom-filter indexes on ClickHouse, JSON on
-// SQLite/DuckDB).
+// SQLite/DuckDB). Contains switches from exact match to case-insensitive
+// substring match; Exclude negates either mode. Negated filters keep rows
+// that don't carry the attribute at all.
 type LogAttributeFilter struct {
-	Scope   string
-	Key     string
-	Value   string
-	Exclude bool
+	Scope    string
+	Key      string
+	Value    string
+	Exclude  bool
+	Contains bool
 }
 
 type LogSearchParams struct {

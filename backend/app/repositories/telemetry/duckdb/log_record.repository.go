@@ -255,7 +255,17 @@ func (r *logRecordRepository) buildWhere(params shared.LogSearchParams) (string,
 		}
 		keyPH := fmt.Sprintf("attr_k%d", i)
 		valPH := fmt.Sprintf("attr_v%d", i)
-		if f.Exclude {
+		if f.Contains {
+			// Case-insensitive substring match. COALESCE keeps the negated
+			// form true for rows that don't carry the attribute at all
+			// (json_extract_string yields NULL there, and INSTR on NULL is NULL).
+			expr := fmt.Sprintf("INSTR(LOWER(COALESCE(json_extract_string(%s, '$.\"' || :%s || '\"'), '')), LOWER(:%s))", col, keyPH, valPH)
+			if f.Exclude {
+				clauses = append(clauses, expr+" = 0")
+			} else {
+				clauses = append(clauses, expr+" > 0")
+			}
+		} else if f.Exclude {
 			// COALESCE keeps rows that don't carry the attribute at all
 			// (json_extract_string yields NULL there, and NULL != value is NULL).
 			clauses = append(clauses,

@@ -185,14 +185,22 @@
 		key: string;
 		value: string;
 		exclude: boolean;
+		contains: boolean;
 	};
 
+	type FilterOperator = '=' | '!=' | '~=' | '!~=';
+
+	function filterOperator(f: AttributeFilter): FilterOperator {
+		if (f.contains) return f.exclude ? '!~=' : '~=';
+		return f.exclude ? '!=' : '=';
+	}
+
 	// Parse `resource.service.name=backend-service` or `log.method!=Enter`
-	// (scope.*/log.* likewise) into a structured filter. Returns null if the
-	// input doesn't match the shape.
+	// (scope.*/log.* likewise; `~=` / `!~=` for substring match) into a
+	// structured filter. Returns null if the input doesn't match the shape.
 	function parseAttributeFilter(input: string): AttributeFilter | null {
 		const trimmed = input.trim();
-		const m = trimmed.match(/^(resource|scope|log)\.([^=]+?)(!=|=)(.*)$/);
+		const m = trimmed.match(/^(resource|scope|log)\.(.+?)(!~=|~=|!=|=)(.*)$/);
 		if (!m) return null;
 		const key = m[2].trim();
 		if (!key) return null;
@@ -200,12 +208,13 @@
 			scope: m[1] as AttributeFilter['scope'],
 			key,
 			value: m[4],
-			exclude: m[3] === '!='
+			exclude: m[3].startsWith('!'),
+			contains: m[3].includes('~')
 		};
 	}
 
 	function formatAttributeFilter(f: AttributeFilter): string {
-		return `${f.scope}.${f.key}${f.exclude ? '!=' : '='}${f.value}`;
+		return `${f.scope}.${f.key}${filterOperator(f)}${f.value}`;
 	}
 
 	function parseLogsUrlParams() {
@@ -270,15 +279,25 @@
 	let addFilterOpen = $state(false);
 	let dialogKey = $state('');
 	let dialogValue = $state('');
-	let dialogExclude = $state(false);
+	let dialogOperator = $state<FilterOperator>('=');
 	let dialogError = $state('');
 	// Index into attributeFilters when editing an existing pill, null when adding.
 	let dialogEditIndex = $state<number | null>(null);
 
+	const operatorOptions: { value: FilterOperator; symbol: string; label: string }[] = [
+		{ value: '=', symbol: '=', label: 'Equals' },
+		{ value: '!=', symbol: '≠', label: 'Not equals' },
+		{ value: '~=', symbol: '~', label: 'Contains' },
+		{ value: '!~=', symbol: '!~', label: 'Not contains' }
+	];
+	const dialogOperatorOption = $derived(
+		operatorOptions.find((o) => o.value === dialogOperator) ?? operatorOptions[0]
+	);
+
 	function openAddFilterDialog() {
 		dialogKey = '';
 		dialogValue = '';
-		dialogExclude = false;
+		dialogOperator = '=';
 		dialogError = '';
 		dialogEditIndex = null;
 		addFilterOpen = true;
@@ -288,14 +307,14 @@
 		const f = attributeFilters[index];
 		dialogKey = `${f.scope}.${f.key}`;
 		dialogValue = f.value;
-		dialogExclude = f.exclude;
+		dialogOperator = filterOperator(f);
 		dialogError = '';
 		dialogEditIndex = index;
 		addFilterOpen = true;
 	}
 
 	function submitDialogFilter() {
-		const composed = `${dialogKey.trim()}${dialogExclude ? '!=' : '='}${dialogValue}`;
+		const composed = `${dialogKey.trim()}${dialogOperator}${dialogValue}`;
 		const parsed = parseAttributeFilter(composed);
 		if (!parsed) {
 			dialogError = 'Key must start with resource., scope., or log.';
@@ -316,7 +335,8 @@
 				f.scope === filter.scope &&
 				f.key === filter.key &&
 				f.value === filter.value &&
-				f.exclude === filter.exclude
+				f.exclude === filter.exclude &&
+				f.contains === filter.contains
 		);
 		attributeFilters = dup
 			? attributeFilters.filter((_, i) => i !== index)
@@ -330,7 +350,8 @@
 				f.scope === filter.scope &&
 				f.key === filter.key &&
 				f.value === filter.value &&
-				f.exclude === filter.exclude
+				f.exclude === filter.exclude &&
+				f.contains === filter.contains
 		);
 		if (!dup) {
 			attributeFilters = [...attributeFilters, filter];
@@ -355,8 +376,10 @@
 		value: string
 	): 'none' | 'include' | 'exclude' {
 		const { scope, key } = displayKeyToFilter(displayKey);
+		// Contains filters are ignored: an attribute tile reflects (and toggles)
+		// only exact-match filters for its value.
 		const f = attributeFilters.find(
-			(f) => f.scope === scope && f.key === key && f.value === value
+			(f) => !f.contains && f.scope === scope && f.key === key && f.value === value
 		);
 		if (!f) return 'none';
 		return f.exclude ? 'exclude' : 'include';
@@ -367,10 +390,10 @@
 	function toggleAttributeFilter(displayKey: string, value: string) {
 		const { scope, key } = displayKeyToFilter(displayKey);
 		const existing = attributeFilters.findIndex(
-			(f) => f.scope === scope && f.key === key && f.value === value
+			(f) => !f.contains && f.scope === scope && f.key === key && f.value === value
 		);
 		if (existing === -1) {
-			attributeFilters = [...attributeFilters, { scope, key, value, exclude: false }];
+			attributeFilters = [...attributeFilters, { scope, key, value, exclude: false, contains: false }];
 		} else {
 			attributeFilters = attributeFilters.filter((_, i) => i !== existing);
 		}
@@ -898,7 +921,7 @@
 					onclick={() => openEditFilterDialog(i)}
 				>
 					<span class="text-muted-foreground">{f.scope}.{f.key}</span>
-					<span class={f.exclude ? 'text-red-500' : ''}>{f.exclude ? '!=' : '='}</span>
+					<span class={f.exclude ? 'text-red-500' : ''}>{filterOperator(f)}</span>
 					<span>{f.value}</span>
 				</button>
 				<button
@@ -935,28 +958,26 @@
 				</label>
 				<div class="flex flex-col gap-1 text-sm">
 					<span class="font-medium">Operator</span>
-					<div class="flex">
-						<button
-							type="button"
-							aria-pressed={!dialogExclude}
-							class="flex-1 rounded-l-md border px-3 py-2 text-sm transition-colors {!dialogExclude
-								? 'z-10 border-primary bg-primary font-semibold text-primary-foreground'
-								: 'border-input text-muted-foreground hover:text-foreground'}"
-							onclick={() => (dialogExclude = false)}
-						>
-							<span class="font-mono">=</span> Equals
-						</button>
-						<button
-							type="button"
-							aria-pressed={dialogExclude}
-							class="-ml-px flex-1 rounded-r-md border px-3 py-2 text-sm transition-colors {dialogExclude
-								? 'z-10 border-primary bg-primary font-semibold text-primary-foreground'
-								: 'border-input text-muted-foreground hover:text-foreground'}"
-							onclick={() => (dialogExclude = true)}
-						>
-							<span class="font-mono">≠</span> Not equals
-						</button>
-					</div>
+					<Select.Root
+						type="single"
+						value={dialogOperator}
+						onValueChange={(v) => (dialogOperator = v as FilterOperator)}
+					>
+						<Select.Trigger class="w-full">
+							<span>
+								<span class="font-mono text-muted-foreground">{dialogOperatorOption.symbol}</span>
+								{dialogOperatorOption.label}
+							</span>
+						</Select.Trigger>
+						<Select.Content>
+							{#each operatorOptions as opt (opt.value)}
+								<Select.Item value={opt.value} label={opt.label}>
+									<span class="font-mono text-muted-foreground">{opt.symbol}</span>
+									{opt.label}
+								</Select.Item>
+							{/each}
+						</Select.Content>
+					</Select.Root>
 				</div>
 				<label class="flex flex-col gap-1 text-sm">
 					<span class="font-medium">Value</span>

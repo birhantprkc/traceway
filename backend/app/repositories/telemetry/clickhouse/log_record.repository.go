@@ -226,13 +226,24 @@ func (r *logRecordRepository) buildWhere(params shared.LogSearchParams) (string,
 		if col == "" {
 			continue
 		}
-		op := "="
-		if f.Exclude {
-			// Map columns default missing keys to '', so != also keeps rows
-			// that don't carry the attribute at all.
-			op = "!="
+		if f.Contains {
+			// Case-insensitive substring match. Map columns default missing
+			// keys to '', which contains nothing, so the negated form keeps
+			// rows that don't carry the attribute at all.
+			op := "> 0"
+			if f.Exclude {
+				op = "= 0"
+			}
+			clauses = append(clauses, "positionCaseInsensitive("+col+"[?], ?) "+op)
+		} else {
+			op := "="
+			if f.Exclude {
+				// Map columns default missing keys to '', so != also keeps rows
+				// that don't carry the attribute at all.
+				op = "!="
+			}
+			clauses = append(clauses, col+"[?] "+op+" ?")
 		}
-		clauses = append(clauses, col+"[?] "+op+" ?")
 		args = append(args, f.Key, f.Value)
 	}
 

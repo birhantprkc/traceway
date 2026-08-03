@@ -20,10 +20,11 @@ type logController struct{}
 var LogController = logController{}
 
 type LogAttributeFilterRequest struct {
-	Scope   string `json:"scope"` // "resource" | "scope" | "log"
-	Key     string `json:"key"`
-	Value   string `json:"value"`
-	Exclude bool   `json:"exclude"`
+	Scope    string `json:"scope"` // "resource" | "scope" | "log"
+	Key      string `json:"key"`
+	Value    string `json:"value"`
+	Exclude  bool   `json:"exclude"`
+	Contains bool   `json:"contains"`
 }
 
 type LogPaginationParams struct {
@@ -101,10 +102,11 @@ func (l logController) List(c *gin.Context) {
 			continue
 		}
 		attrFilters = append(attrFilters, telemetry.LogAttributeFilter{
-			Scope:   f.Scope,
-			Key:     f.Key,
-			Value:   f.Value,
-			Exclude: f.Exclude,
+			Scope:    f.Scope,
+			Key:      f.Key,
+			Value:    f.Value,
+			Exclude:  f.Exclude,
+			Contains: f.Contains,
 		})
 	}
 
