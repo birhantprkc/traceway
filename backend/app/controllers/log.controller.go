@@ -26,6 +26,11 @@ type LogAttributeFilterRequest struct {
 	Exclude bool   `json:"exclude"`
 }
 
+type LogPaginationParams struct {
+	Page     int `json:"page" binding:"min=1"`
+	PageSize int `json:"pageSize" binding:"min=1,max=500"`
+}
+
 type LogSearchRequest struct {
 	FromDate           time.Time                   `json:"fromDate"`
 	ToDate             time.Time                   `json:"toDate"`
@@ -42,7 +47,7 @@ type LogSearchRequest struct {
 	DistributedTraceId string                      `json:"distributedTraceId"`
 	ExcludeTraceId     string                      `json:"excludeTraceId"`
 	AttributeFilters   []LogAttributeFilterRequest `json:"attributeFilters"`
-	Pagination         PaginationParams            `json:"pagination"`
+	Pagination         LogPaginationParams         `json:"pagination"`
 }
 
 // Max time range allowed for body search without any other selector. Keeps a
