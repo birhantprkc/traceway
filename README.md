@@ -25,7 +25,7 @@
 
 ---
 
-Traceway is an **OpenTelemetry-native** observability platform. It combines **logs, traces, metrics, session replay/RUM, exceptions, and AI tracing** in one place. Point an OTLP exporter at it and you're in business. No Collector, no glue code, no per-language vendor SDK.
+Traceway is an **OpenTelemetry-native** observability platform. It combines **logs, traces, metrics, session replay/RUM, exceptions, AI tracing, and on-call paging** in one place. Point an OTLP exporter at it and you're in business. No Collector, no glue code, no per-language vendor SDK.
 
 **MIT licensed. No BSL. No "open core."** Every feature is in the box. Self-host it for free, or run it on [Traceway Cloud](https://cloud.tracewayapp.com) if you'd rather not babysit infra.
 
@@ -51,6 +51,7 @@ Traceway is an **OpenTelemetry-native** observability platform. It combines **lo
 - **Profiling** _(experimental)_: Flame graphs for CPU, heap, and goroutines with version-to-version diffing and a top-functions table. Ingests native Go pprof and OTLP profiles.
 - **Session Replay**: Watch what the user did right before the error. Available for web (any JS framework) and Flutter.
 - **AI Observability**: LLM cost, tokens, latency, and full conversations across providers (OpenRouter and any OTel-compatible AI gateway).
+- **On-Call & Paging**: Rotation schedules with layers and overrides, escalation policies, and pages that escalate until someone acknowledges. Delivered via email, Slack, Pushover, Telegram, or SMS, with one-click acknowledge links that need no login.
 
 Plus: background-task (job) monitoring, configurable alerts (Slack / GitHub / email / webhook / Pushover / Telegram), multi-tenant orgs with role-based access, and a per-endpoint slow-threshold override.
 
