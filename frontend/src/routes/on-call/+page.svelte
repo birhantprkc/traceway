@@ -6,12 +6,40 @@
 	import { projectsState } from '$lib/state/projects.svelte';
 	import { oncallState } from '$lib/state/oncall.svelte';
 	import * as Select from '$lib/components/ui/select';
-	import * as Tabs from '$lib/components/ui/tabs';
+	import TabsRow from '$lib/components/traceway/tabs-row.svelte';
+	import InfoCallout from '$lib/components/traceway/info-callout.svelte';
 	import OverviewTab from './overview-tab.svelte';
 	import TeamsTab from './teams-tab.svelte';
 	import SchedulesTab from './schedules-tab.svelte';
 	import PagesTab from './pages-tab.svelte';
 	import PoliciesTab from './policies-tab.svelte';
+
+	const TABS = [
+		{ value: 'pages', label: 'Pages' },
+		{ value: 'overview', label: 'Overview' },
+		{ value: 'teams', label: 'Teams' },
+		{ value: 'schedules', label: 'Schedules' },
+		{ value: 'policies', label: 'Policies' }
+	];
+
+	const TAB_DESCRIPTIONS: Record<string, string> = {
+		pages:
+			'Pages are incidents opened when a rule fires through an escalation policy. Acknowledge a page to stop further escalation, and resolve it once the issue is fixed.',
+		overview:
+			'A live view of who is on call right now for each team and schedule in the organization, and who takes over next.',
+		teams:
+			'Teams group organization members and own projects. When a page is opened for a project, it is routed to the team that owns it. Schedules belong to teams.',
+		schedules:
+			'Schedules define who is on call at any moment using rotation layers and one-off overrides. Exactly one person is on call per schedule at a time.',
+		policies:
+			'Escalation policies define who gets paged and in what order. If a page is not acknowledged in time, it escalates to the next step. Attach a policy to an alert rule through an Escalation channel.'
+	};
+
+	const NEW_BUTTON_LABELS: Record<string, string> = {
+		teams: 'New Team',
+		schedules: 'New Schedule',
+		policies: 'New Policy'
+	};
 
 	const orgs = $derived(authState.organizations);
 
@@ -49,6 +77,18 @@
 
 	const activeTab = $derived(page.url.searchParams.get('tab') || 'pages');
 
+	const newButtonLabel = $derived(canManage ? NEW_BUTTON_LABELS[activeTab] : undefined);
+
+	let teamsTab = $state<TeamsTab>();
+	let schedulesTab = $state<SchedulesTab>();
+	let policiesTab = $state<PoliciesTab>();
+
+	function openNewForTab() {
+		if (activeTab === 'teams') teamsTab?.openNew();
+		else if (activeTab === 'schedules') schedulesTab?.openNew();
+		else if (activeTab === 'policies') policiesTab?.openNew();
+	}
+
 	function setTab(tab: string) {
 		const url = new URL(window.location.href);
 		url.searchParams.set('tab', tab);
@@ -74,7 +114,7 @@
 </script>
 
 <div class="space-y-4">
-	<div class="flex items-center justify-between gap-4">
+	<div class="flex flex-wrap items-center justify-between gap-4">
 		<h1 class="text-3xl font-semibold tracking-tight">On-Call</h1>
 		{#if orgs.length > 1}
 			<div class="flex items-center gap-2">
@@ -99,20 +139,17 @@
 		{/if}
 	</div>
 
-	<Tabs.Root
-		value={activeTab}
-		onValueChange={(v) => {
-			if (v) setTab(v);
-		}}
-	>
-		<Tabs.List>
-			<Tabs.Trigger value="pages">Pages</Tabs.Trigger>
-			<Tabs.Trigger value="overview">Overview</Tabs.Trigger>
-			<Tabs.Trigger value="teams">Teams</Tabs.Trigger>
-			<Tabs.Trigger value="schedules">Schedules</Tabs.Trigger>
-			<Tabs.Trigger value="policies">Policies</Tabs.Trigger>
-		</Tabs.List>
-	</Tabs.Root>
+	<TabsRow
+		tabs={TABS}
+		{activeTab}
+		onTabChange={setTab}
+		actionLabel={newButtonLabel}
+		onAction={openNewForTab}
+	/>
+
+	{#if TAB_DESCRIPTIONS[activeTab]}
+		<InfoCallout>{TAB_DESCRIPTIONS[activeTab]}</InfoCallout>
+	{/if}
 
 	{#if currentOrganizationId === null}
 		<div
@@ -125,10 +162,10 @@
 	{:else if activeTab === 'overview'}
 		<OverviewTab organizationId={currentOrganizationId} onGoToTeams={() => setTab('teams')} />
 	{:else if activeTab === 'teams'}
-		<TeamsTab organizationId={currentOrganizationId} {canManage} />
+		<TeamsTab bind:this={teamsTab} organizationId={currentOrganizationId} {canManage} />
 	{:else if activeTab === 'schedules'}
-		<SchedulesTab organizationId={currentOrganizationId} {canManage} />
+		<SchedulesTab bind:this={schedulesTab} organizationId={currentOrganizationId} {canManage} />
 	{:else if activeTab === 'policies'}
-		<PoliciesTab organizationId={currentOrganizationId} {canManage} />
+		<PoliciesTab bind:this={policiesTab} organizationId={currentOrganizationId} {canManage} />
 	{/if}
 </div>

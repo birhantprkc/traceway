@@ -3,7 +3,7 @@
 	import { Badge } from '$lib/components/ui/badge';
 	import * as Table from '$lib/components/ui/table';
 	import { LoadingCircle } from '$lib/components/ui/loading-circle';
-	import { Plus } from '@lucide/svelte';
+	import EmptyState from '$lib/components/traceway/empty-state.svelte';
 	import { oncallState, type Schedule } from '$lib/state/oncall.svelte';
 	import ScheduleDialog from './schedule-dialog.svelte';
 	import ScheduleDetail from './schedule-detail.svelte';
@@ -34,17 +34,13 @@
 	function selectSchedule(schedule: Schedule) {
 		selectedScheduleId = selectedScheduleId === schedule.id ? null : schedule.id;
 	}
+
+	export function openNew() {
+		scheduleDialogOpen = true;
+	}
 </script>
 
 <div class="space-y-4">
-	{#if canManage}
-		<div class="flex justify-end">
-			<Button size="sm" variant="success" onclick={() => (scheduleDialogOpen = true)}>
-				<Plus class="mr-1 h-4 w-4" /> New Schedule
-			</Button>
-		</div>
-	{/if}
-
 	{#if oncallState.schedulesLoading}
 		<div class="flex justify-center py-12"><LoadingCircle size="xlg" /></div>
 		{:else if oncallState.schedulesError}
@@ -57,17 +53,11 @@
 			</Button>
 		</div>
 {:else if schedules.length === 0}
-		<div
-			class="flex flex-col items-center justify-center rounded-md bg-muted py-20 text-center text-muted-foreground"
-		>
-			<p class="mb-4">No schedules yet. Create one to get started.</p>
-			{#if canManage}
-				<Button variant="success" onclick={() => (scheduleDialogOpen = true)}>
-					<Plus class="mr-1 h-4 w-4" />
-					Create your first Schedule
-				</Button>
-			{/if}
-		</div>
+		<EmptyState
+			message="No schedules yet. Create one to get started."
+			actionLabel={canManage ? 'Create your first Schedule' : undefined}
+			onAction={openNew}
+		/>
 	{:else}
 		<div class="overflow-hidden rounded-md border">
 			<Table.Root>

@@ -5,7 +5,8 @@
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
 	import * as Avatar from '$lib/components/ui/avatar';
 	import { LoadingCircle } from '$lib/components/ui/loading-circle';
-	import { Plus, Pencil, Trash2 } from '@lucide/svelte';
+	import EmptyState from '$lib/components/traceway/empty-state.svelte';
+	import { Pencil, Trash2 } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { oncallState, type Team } from '$lib/state/oncall.svelte';
 	import TeamDialog from './team-dialog.svelte';
@@ -33,7 +34,7 @@
 			.join('');
 	}
 
-	function openNewTeam() {
+	export function openNew() {
 		editingTeam = null;
 		teamDialogOpen = true;
 	}
@@ -60,14 +61,6 @@
 </script>
 
 <div class="space-y-4">
-	{#if canManage}
-		<div class="flex justify-end">
-			<Button size="sm" variant="success" onclick={openNewTeam}>
-				<Plus class="mr-1 h-4 w-4" /> New Team
-			</Button>
-		</div>
-	{/if}
-
 	{#if oncallState.teamsLoading}
 		<div class="flex justify-center py-12"><LoadingCircle size="xlg" /></div>
 		{:else if oncallState.teamsError}
@@ -80,17 +73,11 @@
 			</Button>
 		</div>
 {:else if teams.length === 0}
-		<div
-			class="flex flex-col items-center justify-center rounded-md bg-muted py-20 text-center text-muted-foreground"
-		>
-			<p class="mb-4">No teams yet. Create a team to get started.</p>
-			{#if canManage}
-				<Button variant="success" onclick={openNewTeam}>
-					<Plus class="mr-1 h-4 w-4" />
-					Create your first Team
-				</Button>
-			{/if}
-		</div>
+		<EmptyState
+			message="No teams yet. Create a team to get started."
+			actionLabel={canManage ? 'Create your first Team' : undefined}
+			onAction={openNew}
+		/>
 	{:else}
 		<div class="overflow-hidden rounded-md border">
 			<Table.Root>

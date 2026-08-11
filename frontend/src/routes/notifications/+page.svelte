@@ -12,10 +12,11 @@
 	import { PaginationFooter } from '$lib/components/ui/pagination-footer';
 	import { toast } from 'svelte-sonner';
 	import * as Table from '$lib/components/ui/table';
-	import * as Tabs from '$lib/components/ui/tabs';
-	import * as Alert from '$lib/components/ui/alert';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
-	import { Plus, Pencil, Trash2, Zap, ZapOff, Clock, Send, Info } from '@lucide/svelte';
+	import TabsRow from '$lib/components/traceway/tabs-row.svelte';
+	import InfoCallout from '$lib/components/traceway/info-callout.svelte';
+	import EmptyState from '$lib/components/traceway/empty-state.svelte';
+	import { Pencil, Trash2, Zap, ZapOff, Clock, Send } from '@lucide/svelte';
 	import { SearchBar } from '$lib/components/ui/search-bar';
 	import { TableEmptyState } from '$lib/components/ui/table-empty-state';
 	import { TimeRangePicker } from '$lib/components/ui/time-range-picker';
@@ -93,6 +94,12 @@
 		history:
 			'A log of all notifications that have been sent, including their status and the rule that triggered them.'
 	};
+
+	const TABS = [
+		{ value: 'channels', label: 'Channels' },
+		{ value: 'rules', label: 'Rules' },
+		{ value: 'history', label: 'History' }
+	];
 
 	const activeTab = $derived(page.url.searchParams.get('tab') || 'channels');
 
@@ -384,6 +391,12 @@
 		ruleDialogOpen = true;
 	}
 
+	const newAction = $derived.by(() => {
+		if (activeTab === 'channels') return { label: 'New Channel', onclick: openNewChannel };
+		if (activeTab === 'rules') return { label: 'New Rule', onclick: openNewRule };
+		return null;
+	});
+
 	function formatDate(dateStr: string) {
 		const date = new Date(dateStr);
 		const now = new Date();
@@ -459,43 +472,25 @@
 		<h1 class="text-3xl font-semibold tracking-tight">Alerts</h1>
 	</div>
 
-	<div class="flex items-center justify-between">
-		<Tabs.Root value={activeTab} onValueChange={(v) => { if (v) setTab(v); }}>
-			<Tabs.List>
-				<Tabs.Trigger value="channels">Channels</Tabs.Trigger>
-				<Tabs.Trigger value="rules">Rules</Tabs.Trigger>
-				<Tabs.Trigger value="history">History</Tabs.Trigger>
-			</Tabs.List>
-		</Tabs.Root>
-		{#if activeTab === 'channels'}
-			<Button size="sm" variant="success" onclick={openNewChannel}>
-				<Plus class="mr-1 h-4 w-4" /> New Channel
-			</Button>
-		{:else if activeTab === 'rules'}
-			<Button size="sm" variant="success" onclick={openNewRule}>
-				<Plus class="mr-1 h-4 w-4" /> New Rule
-			</Button>
-		{/if}
-	</div>
+	<TabsRow
+		tabs={TABS}
+		{activeTab}
+		onTabChange={setTab}
+		actionLabel={newAction?.label}
+		onAction={newAction?.onclick}
+	/>
 
-	<Alert.Root class="bg-blue-50 border-blue-200 text-blue-900 dark:bg-blue-950/50 dark:border-blue-800 dark:text-blue-200">
-		<Info class="text-blue-600 dark:text-blue-400" />
-		<Alert.Description class="text-blue-800 dark:text-blue-300">{tabDescriptions[activeTab]}</Alert.Description>
-	</Alert.Root>
+	<InfoCallout>{tabDescriptions[activeTab]}</InfoCallout>
 
 	{#if activeTab === 'channels'}
 		{#if channelsLoading}
 			<div class="flex justify-center py-12"><LoadingCircle size="xlg" /></div>
 		{:else if channels.length === 0}
-			<div
-				class="flex flex-col items-center justify-center rounded-md bg-muted py-20 text-center text-muted-foreground"
-			>
-				<p class="mb-4">No channels yet. Create one to get started.</p>
-				<Button variant="success" onclick={openNewChannel}>
-					<Plus class="mr-1 h-4 w-4" />
-					Create your first Channel
-				</Button>
-			</div>
+			<EmptyState
+				message="No channels yet. Create one to get started."
+				actionLabel="Create your first Channel"
+				onAction={openNewChannel}
+			/>
 		{:else}
 			<div class="overflow-hidden rounded-md border">
 				<Table.Root>
@@ -566,15 +561,11 @@
 		{#if rulesLoading}
 			<div class="flex justify-center py-12"><LoadingCircle size="xlg" /></div>
 		{:else if rules.length === 0}
-			<div
-				class="flex flex-col items-center justify-center rounded-md bg-muted py-20 text-center text-muted-foreground"
-			>
-				<p class="mb-4">No rules yet. Create one to get started.</p>
-				<Button variant="success" onclick={openNewRule}>
-					<Plus class="mr-1 h-4 w-4" />
-					Create your first Rule
-				</Button>
-			</div>
+			<EmptyState
+				message="No rules yet. Create one to get started."
+				actionLabel="Create your first Rule"
+				onAction={openNewRule}
+			/>
 		{:else}
 			<div class="overflow-hidden rounded-md border">
 				<Table.Root>

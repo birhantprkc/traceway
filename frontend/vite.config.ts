@@ -71,7 +71,7 @@ export default defineConfig(({ mode }) => {
 		server: {
 			proxy: {
 				'/api': {
-					target: 'http://localhost:8082',
+					target: env.TRACEWAY_API_PROXY || 'http://localhost:8082',
 					changeOrigin: true
 					// rewrite: (path) => path.replace(/^\/api/, '')
 				}

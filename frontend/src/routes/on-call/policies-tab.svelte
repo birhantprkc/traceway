@@ -10,7 +10,8 @@
 	} from '$lib/components/ui/card';
 	import { ErrorAlert } from '$lib/components/ui/error-alert';
 	import { LoadingCircle } from '$lib/components/ui/loading-circle';
-	import { Plus, Pencil, Trash2 } from '@lucide/svelte';
+	import EmptyState from '$lib/components/traceway/empty-state.svelte';
+	import { Pencil, Trash2 } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { api } from '$lib/api';
 	import { projectsState } from '$lib/state/projects.svelte';
@@ -105,7 +106,7 @@
 		});
 	});
 
-	function openNew() {
+	export function openNew() {
 		editingPolicy = null;
 		policyDialogOpen = true;
 	}
@@ -132,14 +133,6 @@
 </script>
 
 <div class="space-y-4">
-	{#if canManage}
-		<div class="flex justify-end">
-			<Button size="sm" variant="success" onclick={openNew}>
-				<Plus class="mr-1 h-4 w-4" /> New Policy
-			</Button>
-		</div>
-	{/if}
-
 	{#if oncallState.policiesLoading}
 		<div class="flex justify-center py-12"><LoadingCircle size="xlg" /></div>
 		{:else if oncallState.policiesError}
@@ -152,17 +145,11 @@
 			</Button>
 		</div>
 {:else if oncallState.policies.length === 0}
-		<div
-			class="flex flex-col items-center justify-center rounded-md bg-muted py-20 text-center text-muted-foreground"
-		>
-			<p class="mb-4">No escalation policies yet. Define who gets paged, and in what order.</p>
-			{#if canManage}
-				<Button variant="success" onclick={openNew}>
-					<Plus class="mr-1 h-4 w-4" />
-					Create your first Policy
-				</Button>
-			{/if}
-		</div>
+		<EmptyState
+			message="No escalation policies yet. Define who gets paged, and in what order."
+			actionLabel={canManage ? 'Create your first Policy' : undefined}
+			onAction={openNew}
+		/>
 	{:else}
 		<div class="space-y-3">
 			{#each oncallState.policies as policy (policy.id)}
