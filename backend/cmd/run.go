@@ -21,6 +21,8 @@ import (
 	"github.com/tracewayapp/traceway/backend/app/models"
 	"github.com/tracewayapp/traceway/backend/app/monitoring"
 	"github.com/tracewayapp/traceway/backend/app/notifications"
+	"github.com/tracewayapp/traceway/backend/app/oncall"
+	"github.com/tracewayapp/traceway/backend/app/outbox"
 	"github.com/tracewayapp/traceway/backend/app/recordings"
 	"github.com/tracewayapp/traceway/backend/app/retention"
 	"github.com/tracewayapp/traceway/backend/app/services"
@@ -146,6 +148,7 @@ func Run(opts ...Option) {
 	middleware.InitRequireWriteAccess()
 	middleware.InitRequireProjectAccess()
 	middleware.InitRequireAdminAccess()
+	middleware.InitRequireOrganizationAccess()
 	middleware.InitUseSourceMapAuth()
 
 	services.InitEmail()
@@ -156,6 +159,11 @@ func Run(opts ...Option) {
 		hook(ctx)
 	}
 
+	outbox.RegisterSender(notifications.AdapterSend)
+	outbox.RegisterTerminalHook(notifications.OnOutboxTerminal)
+	notifications.RegisterPageOpener(oncall.OpenPageFromDispatch)
+	outbox.StartDrain(ctx)
+	oncall.StartEscalator(ctx)
 	notifications.StartEvaluator(ctx)
 	retention.Start(ctx)
 	recordings.Start(ctx)
@@ -192,6 +200,7 @@ func Run(opts ...Option) {
 		monitoring.StartClickHouseReporter(ctx)
 		monitoring.StartBackendReporter(ctx)
 		monitoring.StartTelemetryDBReporter(ctx)
+		monitoring.StartOutboxReporter(ctx)
 	}
 
 	router.GET("/health", func(c *gin.Context) {
@@ -270,11 +279,26 @@ func Run(opts ...Option) {
 	}
 }
 
+// applyEnvOverrides forwards env vars to a config the embedded Run(opts...)
+// path built without LoadFromEnv; new Cfg fields belong in this table.
 func applyEnvOverrides(cfg *config.Cfg) {
 	for _, m := range []struct {
 		envVar string
 		dest   *string
 	}{
+		{"SMTP_ENABLED", &cfg.SMTPEnabled},
+		{"SMTP_HOST", &cfg.SMTPHost},
+		{"SMTP_PORT", &cfg.SMTPPort},
+		{"SMTP_USERNAME", &cfg.SMTPUsername},
+		{"SMTP_PASSWORD", &cfg.SMTPPassword},
+		{"SMTP_FROM", &cfg.SMTPFrom},
+		{"ONCALL_POLL_SECONDS", &cfg.OncallPollSeconds},
+		{"OUTBOX_POLL_SECONDS", &cfg.OutboxPollSeconds},
+		{"TWILIO_ACCOUNT_SID", &cfg.TwilioAccountSID},
+		{"TWILIO_AUTH_TOKEN", &cfg.TwilioAuthToken},
+		{"TWILIO_FROM_NUMBER", &cfg.TwilioFromNumber},
+		{"TWILIO_MESSAGING_SERVICE_SID", &cfg.TwilioMessagingServiceSID},
+		{"ALLOW_PRIVATE_NOTIFICATION_TARGETS", &cfg.AllowPrivateNotificationTargets},
 		{"OAUTH_SESSION_SECRET", &cfg.OAuthSessionSecret},
 		{"GOOGLE_CLIENT_ID", &cfg.GoogleClientID},
 		{"GOOGLE_CLIENT_SECRET", &cfg.GoogleClientSecret},
