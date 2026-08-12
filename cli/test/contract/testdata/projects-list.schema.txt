@@ -1,3 +1,5 @@
+[].aiFlaggedLanguages[]: string
+[].aiFlaggedTerms[]: empty
 [].backendUrl: string
 [].createdAt: string
 [].dropHealthyHealthchecks: bool

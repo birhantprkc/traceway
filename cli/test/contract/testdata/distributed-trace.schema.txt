@@ -2,9 +2,12 @@ distributedTraceId: string
 nodes[].aiTrace.appVersion: string
 nodes[].aiTrace.attributes: null
 nodes[].aiTrace.cachedTokens: number
+nodes[].aiTrace.conversationId: string
 nodes[].aiTrace.distributedTraceId: string
 nodes[].aiTrace.duration: number
 nodes[].aiTrace.finishReason: string
+nodes[].aiTrace.flagged: bool
+nodes[].aiTrace.flaggedTerms[]: string
 nodes[].aiTrace.id: string
 nodes[].aiTrace.inputCost: number
 nodes[].aiTrace.inputTokens: number
@@ -21,6 +24,8 @@ nodes[].aiTrace.responseModel: string
 nodes[].aiTrace.serverName: string
 nodes[].aiTrace.statusCode: number
 nodes[].aiTrace.storageKey: string
+nodes[].aiTrace.toolCallCount: number
+nodes[].aiTrace.toolNames[]: string
 nodes[].aiTrace.totalCost: number
 nodes[].aiTrace.totalTokens: number
 nodes[].aiTrace.traceName: string

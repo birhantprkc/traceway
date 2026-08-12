@@ -2,6 +2,8 @@ organizations[].id: number
 organizations[].name: string
 organizations[].role: string
 organizations[].timezone: string
+projects[].aiFlaggedLanguages[]: string
+projects[].aiFlaggedTerms[]: empty
 projects[].backendUrl: string
 projects[].createdAt: string
 projects[].dropHealthyHealthchecks: bool

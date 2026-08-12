@@ -166,6 +166,11 @@ func seedTelemetry(ctx context.Context, projectIDStr string, at time.Time) error
 		Attributes:         map[string]string{},
 		DistributedTraceId: &seedTraceID,
 		IsRoot:             true,
+		ConversationId:     "contract-conversation",
+		ToolCallCount:      1,
+		ToolNames:          []string{"contract_tool"},
+		Flagged:            true,
+		FlaggedTerms:       []string{"contract-term"},
 	}
 	if err := telemetry.AiTraceRepository.InsertAsync(ctx, []models.AiTrace{aiTrace}); err != nil {
 		return fmt.Errorf("ai trace: %w", err)

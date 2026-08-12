@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -77,6 +78,15 @@ func runAiTracesShow(cmd *cobra.Command, args []string) error {
 			)
 			if a.DistributedTraceId != nil {
 				_, _ = fmt.Fprintf(out, "TRACE ID:     %s\n", a.DistributedTraceId.String())
+			}
+			if a.ConversationId != "" {
+				_, _ = fmt.Fprintf(out, "CONVERSATION: %s\n", a.ConversationId)
+			}
+			if a.ToolCallCount > 0 {
+				_, _ = fmt.Fprintf(out, "TOOL CALLS:   %d (%s)\n", a.ToolCallCount, strings.Join(a.ToolNames, ", "))
+			}
+			if a.Flagged {
+				_, _ = fmt.Fprintf(out, "FLAGGED:      %s\n", strings.Join(a.FlaggedTerms, ", "))
 			}
 		}
 		if len(resp.Conversation) > 0 {

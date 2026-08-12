@@ -81,6 +81,11 @@ type AiTrace struct {
 	Attributes         map[string]string `json:"attributes"`
 	DistributedTraceId *uuid.UUID        `json:"distributedTraceId,omitempty"`
 	IsRoot             bool              `json:"isRoot"`
+	ConversationId     string            `json:"conversationId"`
+	ToolCallCount      int64             `json:"toolCallCount"`
+	ToolNames          []string          `json:"toolNames"`
+	Flagged            bool              `json:"flagged"`
+	FlaggedTerms       []string          `json:"flaggedTerms"`
 }
 
 // Session mirrors models.Session — one user session that can be replayed.
