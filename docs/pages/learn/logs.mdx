@@ -117,7 +117,7 @@ No extra configuration is required — the standard OTel context propagation car
 
 ## Retention
 
-Logs are stored in ClickHouse with daily partitioning and a 90-day TTL on the timestamp date. Older logs are removed automatically without operator intervention. Self-hosted deployments on SQLite or DuckDB prune logs after 30 days by default, configurable with `SQLITE_RETENTION_DAYS`.
+Logs are stored in ClickHouse with daily partitioning and a 90-day TTL on the timestamp date. Older logs are removed automatically without operator intervention. Self-hosted deployments on SQLite or DuckDB prune logs after 30 days by default, configurable with `SQLITE_RETENTION_DAYS` (on DuckDB, `DUCKDB_RETENTION_DAYS`). They can additionally cap the log table with `LOG_RECORDS_MAX_ROWS`. The cap is a cleanup task, not a hard limit: every minute the oldest logs are deleted until only the newest N rows remain. A burst that ingests more than N rows within one minute can still push the table past the cap until the next run, so size the cap with headroom for your peak log volume.
 
 ## Sending Logs
 

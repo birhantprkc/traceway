@@ -45,12 +45,13 @@ Identical to the SQLite image: blobs (source maps, session recordings, AI traces
 
 ## Configuration
 
-All [SQLite deployment variables](/server/sqlite#configuration) apply unchanged (`JWT_SECRET`, `APP_BASE_URL`, `SQLITE_PATH`, `STORAGE_*`, `S3_*`, `PORTS`, `SQLITE_RETENTION_DAYS`, `SESSION_RECORDING_RETENTION_DAYS`). The retention worker prunes the DuckDB telemetry tables on the same `SQLITE_RETENTION_DAYS` schedule and issues a `CHECKPOINT` afterwards so deleted rows are actually reclaimed from disk.
+All [SQLite deployment variables](/server/sqlite#configuration) apply unchanged (`JWT_SECRET`, `APP_BASE_URL`, `SQLITE_PATH`, `STORAGE_*`, `S3_*`, `PORTS`, `LOG_RECORDS_MAX_ROWS`, `SESSION_RECORDING_RETENTION_DAYS`). The retention worker prunes the DuckDB telemetry tables hourly and issues a `CHECKPOINT` afterwards so deleted rows are actually reclaimed from disk. It keeps 30 days by default, configurable with `DUCKDB_RETENTION_DAYS` (when that is unset, a configured `SQLITE_RETENTION_DAYS` still applies as a fallback).
 
-On top of those, the DuckDB engine has three knobs:
+On top of those, the DuckDB build has these knobs:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `DUCKDB_RETENTION_DAYS` | `30` | Days to keep telemetry rows in the DuckDB store. Not a hard cutoff: a cleanup task runs once an hour and deletes rows older than the window, so expired rows can linger until the next run. Set to `0` to disable pruning. Falls back to `SQLITE_RETENTION_DAYS` when unset. |
 | `DUCKDB_MEMORY_LIMIT` | *(unset, DuckDB auto-tunes to ~80% of host RAM)* | Memory budget for the telemetry engine, e.g. `2GB`. Set it explicitly in any memory-capped container, to roughly half the container's RAM. |
 | `DUCKDB_THREADS` | *(unset, DuckDB uses all cores)* | Caps the engine's thread count, e.g. `4`. Useful on shared hosts. |
 | `DUCKDB_CHECKPOINT_THRESHOLD` | *(unset, DuckDB default 16MB)* | WAL size that triggers a checkpoint, e.g. `256MB`. Raise it under sustained ingest to reduce checkpoint stalls; the cost is a larger WAL on disk and a longer replay after a restart. |

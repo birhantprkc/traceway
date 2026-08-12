@@ -73,6 +73,7 @@ If `STORAGE_TYPE` is unset (or set to `local`), blobs are written to `/data/stor
 | `PORTS` | `80,8082` | Comma-separated list of HTTP ports the server should listen on |
 | `GIN_MODE` | `release` | Gin runtime mode |
 | `SQLITE_RETENTION_DAYS` | `30` | Days to keep telemetry rows (endpoints, exceptions, spans, metrics, logs, sessions, recordings, fired notifications, notification history). A background worker prunes older rows once at startup and then every hour. Set to `0` to disable. |
+| `LOG_RECORDS_MAX_ROWS` | *(unset)* | Optional cap on the number of log rows, independent of `SQLITE_RETENTION_DAYS`. This is not a hard limit: a cleanup task runs every minute and deletes the oldest logs until only the newest N rows remain. Between runs the table can grow past N, and if you ingest more than N rows in a single minute the table (and disk usage) will exceed the cap until the next cleanup. Size it with headroom for your peak ingest rate. Unset or `0` disables the cap. |
 | `SESSION_RECORDING_RETENTION_DAYS` | `30` | Days to keep session recording files on disk under `STORAGE_PATH/recordings/`. Files older than the TTL are deleted hourly and on startup; empty subdirectories are removed. No effect when `STORAGE_TYPE=s3`. Set to `0` to disable. |
 
 ## SSO (optional)

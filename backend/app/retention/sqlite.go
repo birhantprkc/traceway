@@ -30,16 +30,16 @@ var telemetryRetentionTargets = []struct {
 	{"profiling_stacks", "last_seen"},
 }
 
-func startSQLiteRetention(ctx context.Context, days int) {
+func startSQLiteRetention(ctx context.Context, days int, source string) {
 	if !db.IsSQLite() {
 		return
 	}
 	if days == 0 {
-		config.Logln("SQLite retention disabled (SQLITE_RETENTION_DAYS=0)")
+		config.Logf("Telemetry retention disabled (%s=0)", source)
 		return
 	}
 
-	config.Logf("Starting SQLite retention worker (TTL: %d days, interval: %s)", days, tickInterval)
+	config.Logf("Starting telemetry retention worker (TTL: %d days, interval: %s, via %s)", days, tickInterval, source)
 
 	go func() {
 		defer traceway.Recover()

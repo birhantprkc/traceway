@@ -37,6 +37,8 @@ type Cfg struct {
 	S3Endpoint  string
 
 	SQLiteRetentionDays             string
+	DuckDBRetentionDays             string
+	LogRecordsMaxRows               string
 	SessionRecordingRetentionDays   string
 	SessionRecordingUploadWorkers   string
 	SessionRecordingUploadQueueSize string
@@ -153,6 +155,8 @@ func LoadFromEnv() *Cfg {
 		S3Endpoint:  os.Getenv("S3_ENDPOINT"),
 
 		SQLiteRetentionDays:             os.Getenv("SQLITE_RETENTION_DAYS"),
+		DuckDBRetentionDays:             os.Getenv("DUCKDB_RETENTION_DAYS"),
+		LogRecordsMaxRows:               os.Getenv("LOG_RECORDS_MAX_ROWS"),
 		SessionRecordingRetentionDays:   os.Getenv("SESSION_RECORDING_RETENTION_DAYS"),
 		SessionRecordingUploadWorkers:   os.Getenv("SESSION_RECORDING_UPLOAD_WORKERS"),
 		SessionRecordingUploadQueueSize: os.Getenv("SESSION_RECORDING_UPLOAD_QUEUE_SIZE"),

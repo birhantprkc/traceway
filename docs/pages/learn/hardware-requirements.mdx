@@ -74,7 +74,7 @@ Two things differ from the SQLite sizing story:
 
 Under sustained ingest, `DUCKDB_CHECKPOINT_THRESHOLD` (default 16MB) can be raised to reduce WAL checkpoint stalls at the cost of a larger WAL and longer restart replay.
 
-Disk behaves like the SQLite story above (same retention worker, same `/data` volume), but columnar compression makes the telemetry file several times smaller for the same rows.
+Disk behaves like the SQLite story above (same retention worker, configured with `DUCKDB_RETENTION_DAYS`, same `/data` volume), but columnar compression makes the telemetry file several times smaller for the same rows.
 
 ## ClickHouse + PostgreSQL mode
 

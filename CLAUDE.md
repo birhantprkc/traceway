@@ -268,6 +268,8 @@ OUTBOX_POLL_SECONDS=15                # notification outbox drain interval; mini
 
 # Retention (see "Data Retention" section below)
 SQLITE_RETENTION_DAYS=30              # 0 to disable; only applies in SQLite mode
+DUCKDB_RETENTION_DAYS=30              # telemetry TTL on the DuckDB backend; when set it wins over SQLITE_RETENTION_DAYS there, when unset SQLITE_RETENTION_DAYS applies as fallback; 0 to disable
+LOG_RECORDS_MAX_ROWS=                 # optional cap on log_records rows; unset/0 = disabled. NOT a hard limit: a cleanup worker trims to the newest N rows once per minute, so ingest above N rows/minute overshoots the cap between runs. Only applies in SQLite mode (SQLite or DuckDB telemetry)
 SESSION_RECORDING_RETENTION_DAYS=30   # 0 to disable; only applies when STORAGE_TYPE=local
 PROFILE_ARCHIVE_RAW=false             # native pprof ingest only: write the original pprof bytes to object storage as a lossless archive
 PROFILE_RETENTION_DAYS=30             # 0 to disable; on-disk archive TTL, only with PROFILE_ARCHIVE_RAW + STORAGE_TYPE=local
@@ -901,6 +903,7 @@ The three profiling tables share a 30-day TTL keyed on each table's time column 
 | Variable | Default | Notes |
 |----------|---------|-------|
 | `SQLITE_RETENTION_DAYS` | `30` | TTL in days. Set to `0` to disable the worker entirely. Has no effect outside SQLite mode. |
+| `DUCKDB_RETENTION_DAYS` | `30` | Same worker on the DuckDB telemetry backend. When set it takes precedence there; when unset the worker falls back to `SQLITE_RETENTION_DAYS` (selection in `retention.telemetryRetentionConfig`). |
 
 Tables it prunes (and the column used):
 
@@ -915,6 +918,8 @@ Tables it prunes (and the column used):
 | Telemetry | `profiling_stacks` | `last_seen` |
 
 `archived_exceptions` (per-hash flags) and `slow_endpoints` (per-endpoint config) are intentionally skipped — they are not time-series data. `profiling_stacks` *is* pruned (unlike those two) because it holds no user intent — it is a regenerable dedup table whose `last_seen` tracks the most recent referencing sample, so deleting expired stacks is safe.
+
+**2b. Log row cap — `retention.Start` worker** (`backend/app/retention/log_cap.go`). SQLite mode only (SQLite or DuckDB telemetry), off by default. When `LOG_RECORDS_MAX_ROWS` is set to a positive N, a worker runs once at startup and then every minute and deletes `log_records` rows strictly older than the Nth-newest row's `timestamp` (single portable DELETE with an `ORDER BY timestamp DESC LIMIT 1 OFFSET N-1` subquery; NULL boundary = no-op under the cap, boundary ties are kept). **The cap is best-effort, not a hard limit**: nothing throttles ingest, so between passes the table can exceed N, and sustained ingest above N rows/minute keeps it above the cap permanently — document it to users as a cleanup task with a 1-minute window, sized with headroom for peak log volume. Bounds log disk usage independently of `SQLITE_RETENTION_DAYS`; disk reclamation still happens via the hourly retention pass / DuckDB WAL checkpointing.
 
 **3. On-disk session recordings — `retention.Start` worker** (`backend/app/retention/recordings.go`). Session recordings written to local disk (`STORAGE_TYPE=local`) accumulate under `<STORAGE_PATH>/recordings/`. A second worker walks that directory once at startup and then every hour and removes files whose `mtime` is older than the TTL, then prunes any directories left empty. The worker is a no-op when `STORAGE_TYPE=s3`.
 
