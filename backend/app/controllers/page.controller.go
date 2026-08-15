@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"database/sql"
 	"net/http"
 	"strconv"
 	"time"
@@ -27,14 +28,39 @@ type listPagesRequest struct {
 
 // pageResponse decorates a page with the exception hash it was opened for
 // (empty for pages not linked to an issue), so the dashboard can offer
-// archiving the issue when the page is resolved.
+// archiving the issue when the page is resolved, plus the display names of
+// the acknowledging/resolving users for the list columns.
 type pageResponse struct {
 	*models.Page
-	IssueHash string `json:"issueHash"`
+	IssueHash          string `json:"issueHash"`
+	AcknowledgedByName string `json:"acknowledgedByName,omitempty"`
+	ResolvedByName     string `json:"resolvedByName,omitempty"`
 }
 
-func toPageResponse(page *models.Page) pageResponse {
-	return pageResponse{Page: page, IssueHash: page.IssueHash()}
+func toPageResponse(page *models.Page, names map[int]string) pageResponse {
+	response := pageResponse{Page: page, IssueHash: page.IssueHash()}
+	if page.AcknowledgedBy != nil {
+		response.AcknowledgedByName = names[*page.AcknowledgedBy]
+	}
+	if page.ResolvedBy != nil {
+		response.ResolvedByName = names[*page.ResolvedBy]
+	}
+	return response
+}
+
+// memberNames maps the organization's member ids to display names; users no
+// longer in the organization simply stay absent (the frontend falls back to
+// "user #id").
+func memberNames(tx *sql.Tx, organizationId int) (map[int]string, error) {
+	members, err := transactional.OrganizationRepository.GetMembersWithDetails(tx, organizationId)
+	if err != nil {
+		return nil, err
+	}
+	names := make(map[int]string, len(members))
+	for _, member := range members {
+		names[member.Id] = member.Name
+	}
+	return names, nil
 }
 
 var validPageStatusFilters = map[string]bool{
@@ -70,9 +96,20 @@ func (c *pageController) List(ctx *gin.Context) {
 		ctx.AbortWithError(http.StatusInternalServerError, traceway.NewStackTraceErrorf("failed to list pages: %w", err))
 		return
 	}
+	names := map[int]string{}
+	for _, page := range pages {
+		if page.AcknowledgedBy != nil || page.ResolvedBy != nil {
+			names, err = memberNames(tx, page.OrganizationId)
+			if err != nil {
+				ctx.AbortWithError(http.StatusInternalServerError, traceway.NewStackTraceErrorf("failed to load members: %w", err))
+				return
+			}
+			break
+		}
+	}
 	items := make([]pageResponse, 0, len(pages))
 	for _, page := range pages {
-		items = append(items, toPageResponse(page))
+		items = append(items, toPageResponse(page, names))
 	}
 
 	totalPages := int64(0)
@@ -105,17 +142,17 @@ func (c *pageController) Get(ctx *gin.Context) {
 		notifications = []*models.PageNotification{}
 	}
 
-	users := map[string]string{}
-	members, err := transactional.OrganizationRepository.GetMembersWithDetails(tx, page.OrganizationId)
+	names, err := memberNames(tx, page.OrganizationId)
 	if err != nil {
 		ctx.AbortWithError(http.StatusInternalServerError, traceway.NewStackTraceErrorf("failed to load members: %w", err))
 		return
 	}
-	for _, member := range members {
-		users[strconv.Itoa(member.Id)] = member.Name
+	users := make(map[string]string, len(names))
+	for id, name := range names {
+		users[strconv.Itoa(id)] = name
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"page": toPageResponse(page), "notifications": notifications, "users": users})
+	ctx.JSON(http.StatusOK, gin.H{"page": toPageResponse(page, names), "notifications": notifications, "users": users})
 }
 
 // Acknowledge deliberately has no write-access gate beyond project read

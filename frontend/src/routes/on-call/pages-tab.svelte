@@ -8,7 +8,7 @@
 	import { PaginationFooter } from '$lib/components/ui/pagination-footer';
 	import { Check, CheckCheck } from '@lucide/svelte';
 	import { api } from '$lib/api';
-	import { formatRelativeTimeAgo } from '$lib/utils/formatters';
+	import { formatDateTime, formatRelativeTimeAgo } from '$lib/utils/formatters';
 	import { projectsState } from '$lib/state/projects.svelte';
 	import { type OncallPage } from '$lib/state/oncall.svelte';
 	import { runPageAction } from './page-actions';
@@ -60,7 +60,30 @@
 	const someSelected = $derived(selectedIds.size > 0 && selectedIds.size < pages.length);
 	const selectedPages = $derived(pages.filter((p) => selectedIds.has(p.id)));
 	const selectedOpenPages = $derived(selectedPages.filter((p) => p.status === 'open'));
+
+	// Columns vary by tab: active/open show Status + Actions, acknowledged
+	// swaps Status for who/when acknowledged, resolved drops Actions and shows
+	// both who/when columns.
+	const showStatus = $derived(statusFilter === 'active' || statusFilter === 'open');
+	const showAcknowledged = $derived(
+		statusFilter === 'acknowledged' || statusFilter === 'resolved'
+	);
+	const showResolved = $derived(statusFilter === 'resolved');
+	const showActions = $derived(statusFilter !== 'resolved');
 	const colCount = $derived(selectable ? 8 : 7);
+
+	function ackLabel(item: OncallPage): string {
+		if (item.acknowledgedBy !== null) {
+			const name = item.acknowledgedByName || `user #${item.acknowledgedBy}`;
+			return item.acknowledgedVia === 'link' ? `${name} (via link)` : name;
+		}
+		return 'Via ack link';
+	}
+
+	function resolvedLabel(item: OncallPage): string {
+		if (item.resolvedByName) return item.resolvedByName;
+		return item.resolvedBy !== null ? `user #${item.resolvedBy}` : '—';
+	}
 
 	let loadSeq = 0;
 
@@ -271,8 +294,18 @@
 						<Table.Head>Level</Table.Head>
 						<Table.Head>Age</Table.Head>
 						<Table.Head>Events</Table.Head>
-						<Table.Head>Status</Table.Head>
-						<Table.Head class="text-right">Actions</Table.Head>
+						{#if showStatus}
+							<Table.Head>Status</Table.Head>
+						{/if}
+						{#if showAcknowledged}
+							<Table.Head>Acknowledged</Table.Head>
+						{/if}
+						{#if showResolved}
+							<Table.Head>Resolved</Table.Head>
+						{/if}
+						{#if showActions}
+							<Table.Head class="text-right">Actions</Table.Head>
+						{/if}
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
@@ -307,33 +340,61 @@
 								>{formatRelativeTimeAgo(item.createdAt)}</Table.Cell
 							>
 							<Table.Cell>{item.eventCount}</Table.Cell>
-							<Table.Cell>
-								<PageBadges status={item.status} />
-							</Table.Cell>
-							<Table.Cell class="text-right">
-								<div class="flex justify-end gap-1">
-									{#if item.status === 'open'}
-										<Button
-											variant="ghost"
-											size="icon"
-											title="Acknowledge"
-											onclick={(e) => acknowledge(item, e)}
-										>
-											<Check class="h-4 w-4" />
-										</Button>
+							{#if showStatus}
+								<Table.Cell>
+									<PageBadges status={item.status} />
+								</Table.Cell>
+							{/if}
+							{#if showAcknowledged}
+								<Table.Cell class="whitespace-nowrap">
+									{#if item.acknowledgedAt}
+										<div>{ackLabel(item)}</div>
+										<div class="text-xs text-muted-foreground">
+											{formatDateTime(item.acknowledgedAt, { format: 'short' })}
+										</div>
+									{:else}
+										<span class="text-muted-foreground">—</span>
 									{/if}
-									{#if item.status !== 'resolved'}
-										<Button
-											variant="ghost"
-											size="icon"
-											title="Resolve"
-											onclick={(e) => resolve(item, e)}
-										>
-											<CheckCheck class="h-4 w-4" />
-										</Button>
+								</Table.Cell>
+							{/if}
+							{#if showResolved}
+								<Table.Cell class="whitespace-nowrap">
+									{#if item.resolvedAt}
+										<div>{resolvedLabel(item)}</div>
+										<div class="text-xs text-muted-foreground">
+											{formatDateTime(item.resolvedAt, { format: 'short' })}
+										</div>
+									{:else}
+										<span class="text-muted-foreground">—</span>
 									{/if}
-								</div>
-							</Table.Cell>
+								</Table.Cell>
+							{/if}
+							{#if showActions}
+								<Table.Cell class="text-right">
+									<div class="flex justify-end gap-1">
+										{#if item.status === 'open'}
+											<Button
+												variant="ghost"
+												size="icon"
+												title="Acknowledge"
+												onclick={(e) => acknowledge(item, e)}
+											>
+												<Check class="h-4 w-4" />
+											</Button>
+										{/if}
+										{#if item.status !== 'resolved'}
+											<Button
+												variant="ghost"
+												size="icon"
+												title="Resolve"
+												onclick={(e) => resolve(item, e)}
+											>
+												<CheckCheck class="h-4 w-4" />
+											</Button>
+										{/if}
+									</div>
+								</Table.Cell>
+							{/if}
 						</Table.Row>
 					{/each}
 				</Table.Body>
