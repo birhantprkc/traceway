@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { Button } from '$lib/components/ui/button';
+	import { Checkbox } from '$lib/components/ui/checkbox';
 	import * as Table from '$lib/components/ui/table';
 	import { LoadingCircle } from '$lib/components/ui/loading-circle';
 	import { TableEmptyState } from '$lib/components/ui/table-empty-state';
@@ -13,6 +14,8 @@
 	import { runPageAction } from './page-actions';
 	import PageBadges from './page-badges.svelte';
 	import PageDetailSheet from './page-detail-sheet.svelte';
+	import ResolvePageDialog from './resolve-page-dialog.svelte';
+	import AcknowledgePagesDialog from './acknowledge-pages-dialog.svelte';
 
 	interface Props {
 		deepLinkPageId?: number | null;
@@ -48,6 +51,17 @@
 	let sheetOpen = $state(false);
 	let selectedPageId = $state<number | null>(null);
 
+	// Bulk selection: resolved pages have no actions, so the resolved tab has
+	// no checkboxes at all.
+	let selectedIds = $state<Set<number>>(new Set());
+	const selectable = $derived(statusFilter !== 'resolved');
+	const selectedCount = $derived(selectedIds.size);
+	const allSelected = $derived(pages.length > 0 && selectedIds.size === pages.length);
+	const someSelected = $derived(selectedIds.size > 0 && selectedIds.size < pages.length);
+	const selectedPages = $derived(pages.filter((p) => selectedIds.has(p.id)));
+	const selectedOpenPages = $derived(selectedPages.filter((p) => p.status === 'open'));
+	const colCount = $derived(selectable ? 8 : 7);
+
 	let loadSeq = 0;
 
 	async function loadPages() {
@@ -67,6 +81,7 @@
 			pages = res.data || [];
 			total = res.pagination?.total || 0;
 			totalPages = res.pagination?.totalPages || 0;
+			selectedIds = new Set();
 		} catch (e: unknown) {
 			if (seq !== loadSeq) return;
 			error = e instanceof Error ? e.message : 'Failed to load pages';
@@ -118,10 +133,42 @@
 		loadPages();
 	}
 
-	async function resolve(item: OncallPage, e: Event) {
+	let resolveDialogOpen = $state(false);
+	let resolveTargets = $state<OncallPage[]>([]);
+	let ackDialogOpen = $state(false);
+
+	function resolve(item: OncallPage, e: Event) {
 		e.stopPropagation();
-		await runPageAction(item.id, 'resolve');
-		loadPages();
+		resolveTargets = [item];
+		resolveDialogOpen = true;
+	}
+
+	function openBulkResolve() {
+		resolveTargets = selectedPages;
+		resolveDialogOpen = true;
+	}
+
+	// Selection handlers
+	function toggleSelectAll() {
+		if (allSelected) {
+			selectedIds = new Set();
+		} else {
+			selectedIds = new Set(pages.map((p) => p.id));
+		}
+	}
+
+	function toggleSelect(id: number) {
+		const newSet = new Set(selectedIds);
+		if (newSet.has(id)) {
+			newSet.delete(id);
+		} else {
+			newSet.add(id);
+		}
+		selectedIds = newSet;
+	}
+
+	function isSelected(id: number): boolean {
+		return selectedIds.has(id);
 	}
 
 	function openDetail(item: OncallPage) {
@@ -152,12 +199,40 @@
 		{/each}
 	</div>
 
+	<!-- Bulk actions toolbar - shown when items selected -->
+	{#if selectable && selectedCount > 0}
+		<div
+			class="flex animate-in items-center gap-3 rounded-md border bg-muted/50 p-3 duration-200 fade-in slide-in-from-top-1"
+		>
+			<span class="text-sm font-medium"
+				>{selectedCount} page{selectedCount === 1 ? '' : 's'} selected</span
+			>
+			<Button
+				variant="outline"
+				size="sm"
+				onclick={() => (ackDialogOpen = true)}
+				disabled={selectedOpenPages.length === 0}
+				class="gap-1.5"
+			>
+				<Check class="h-4 w-4" />
+				Acknowledge
+			</Button>
+			<Button variant="outline" size="sm" onclick={openBulkResolve} class="gap-1.5">
+				<CheckCheck class="h-4 w-4" />
+				Resolve
+			</Button>
+			<Button variant="ghost" size="sm" onclick={() => (selectedIds = new Set())}>
+				Clear selection
+			</Button>
+		</div>
+	{/if}
+
 	<div class="overflow-hidden rounded-md border">
 		<Table.Root>
 			{#if loading}
 				<Table.Body>
 					<Table.Row>
-						<Table.Cell colspan={7} class="h-48">
+						<Table.Cell colspan={colCount} class="h-48">
 							<div class="flex h-full items-center justify-center">
 								<LoadingCircle size="xlg" />
 							</div>
@@ -167,7 +242,7 @@
 			{:else if error}
 				<Table.Body>
 					<Table.Row>
-						<Table.Cell colspan={7} class="h-48">
+						<Table.Cell colspan={colCount} class="h-48">
 							<div class="flex h-full flex-col items-center justify-center gap-3">
 								<p class="text-sm text-destructive">{error}</p>
 								<Button variant="outline" size="sm" onclick={() => loadPages()}>Retry</Button>
@@ -177,11 +252,20 @@
 				</Table.Body>
 			{:else if pages.length === 0}
 				<Table.Body>
-					<TableEmptyState colspan={7} message={emptyMessages[statusFilter]} />
+					<TableEmptyState colspan={colCount} message={emptyMessages[statusFilter]} />
 				</Table.Body>
 			{:else}
 				<Table.Header>
 					<Table.Row>
+						{#if selectable}
+							<Table.Head class="w-[40px] pl-4">
+								<Checkbox
+									checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+									onCheckedChange={toggleSelectAll}
+									aria-label="Select all"
+								/>
+							</Table.Head>
+						{/if}
 						<Table.Head>Severity</Table.Head>
 						<Table.Head>Subject</Table.Head>
 						<Table.Head>Level</Table.Head>
@@ -193,7 +277,20 @@
 				</Table.Header>
 				<Table.Body>
 					{#each pages as item (item.id)}
-						<Table.Row class="cursor-pointer" onclick={() => openDetail(item)}>
+						<Table.Row
+							class="cursor-pointer"
+							data-state={selectable && isSelected(item.id) ? 'selected' : undefined}
+							onclick={() => openDetail(item)}
+						>
+							{#if selectable}
+								<Table.Cell class="pl-4" onclick={(e) => e.stopPropagation()}>
+									<Checkbox
+										checked={isSelected(item.id)}
+										onCheckedChange={() => toggleSelect(item.id)}
+										aria-label="Select row"
+									/>
+								</Table.Cell>
+							{/if}
 							<Table.Cell>
 								<div class="flex items-center gap-1">
 									<PageBadges severity={item.severity} urgency={item.urgency} fallback />
@@ -256,3 +353,5 @@
 </div>
 
 <PageDetailSheet bind:open={sheetOpen} pageId={selectedPageId} onChanged={loadPages} />
+<ResolvePageDialog bind:open={resolveDialogOpen} pages={resolveTargets} onResolved={loadPages} />
+<AcknowledgePagesDialog bind:open={ackDialogOpen} pages={selectedOpenPages} onAcknowledged={loadPages} />
