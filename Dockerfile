@@ -48,7 +48,7 @@ FROM clickhouse/clickhouse-server:24.8-alpine AS clickhouse-source
 # ==============================================================================
 FROM debian:bookworm-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update -o Acquire::Retries=3 -o APT::Update::Error-Mode=any && apt-get install -y --no-install-recommends \
     supervisor \
     ca-certificates \
     curl \

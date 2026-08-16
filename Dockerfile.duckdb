@@ -33,7 +33,7 @@ FROM golang:1.26-bookworm AS backend-builder
 
 WORKDIR /app/backend
 
-RUN apt-get update && apt-get install -y --no-install-recommends git build-essential && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -o Acquire::Retries=3 -o APT::Update::Error-Mode=any && apt-get install -y --no-install-recommends git build-essential && rm -rf /var/lib/apt/lists/*
 
 COPY backend/ ./
 COPY cli/ /app/cli/
@@ -51,7 +51,7 @@ RUN CGO_ENABLED=1 go build -tags telemetry_duckdb -ldflags="-s -w" -o /traceway 
 # ==============================================================================
 FROM debian:bookworm-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tzdata wget libstdc++6 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update -o Acquire::Retries=3 -o APT::Update::Error-Mode=any && apt-get install -y --no-install-recommends ca-certificates tzdata wget libstdc++6 && rm -rf /var/lib/apt/lists/*
 
 COPY --from=backend-builder /traceway /usr/local/bin/traceway
 
