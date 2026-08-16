@@ -309,7 +309,7 @@ test('page loads', async ({ page }) => {
 <Sheet.Root {open} onOpenChange={handleOpenChange}>
 	<Sheet.Content
 		side="right"
-		class="flex w-full flex-col gap-0 overflow-y-auto sm:w-[760px] sm:max-w-[760px]"
+		class="flex w-full flex-col gap-0 overflow-y-auto sm:w-[760px] sm:max-w-[min(760px,100vw)]"
 	>
 		<Sheet.Header class="border-b px-6 pb-4">
 			<Sheet.Title>{isEditing ? 'Edit Monitor' : 'New Monitor'}</Sheet.Title>
@@ -329,7 +329,7 @@ test('page loads', async ({ page }) => {
 		>
 			<ErrorAlert {error} />
 
-			<div class="grid grid-cols-2 gap-4">
+			<div class="grid gap-4 sm:grid-cols-2">
 				<div class="space-y-2">
 					<Label for="monitor-name">Name</Label>
 					<Input
@@ -352,7 +352,7 @@ test('page loads', async ({ page }) => {
 				</div>
 			</div>
 
-			<div class="grid grid-cols-3 gap-4">
+			<div class="grid gap-4 sm:grid-cols-3">
 				<div class="space-y-2">
 					<Label>Interval</Label>
 					<Select.Root type="single" bind:value={intervalSeconds} disabled={loading}>
@@ -511,7 +511,7 @@ test('page loads', async ({ page }) => {
 					{/if}
 				{:else}
 					<div class="space-y-4">
-						<div class="grid grid-cols-2 gap-3">
+						<div class="grid gap-3 sm:grid-cols-2">
 							<div class="space-y-1">
 								<Label for="monitor-status-codes" class="text-xs text-muted-foreground"
 									>Status codes (default: any &lt; 400)</Label
@@ -610,7 +610,7 @@ test('page loads', async ({ page }) => {
 						/>
 					</div>
 				</div>
-				<div class="grid grid-cols-2 gap-3">
+				<div class="grid gap-3 sm:grid-cols-2">
 					<div class="space-y-1">
 						<Label for="monitor-send" class="text-xs text-muted-foreground"
 							>Send payload (optional)</Label

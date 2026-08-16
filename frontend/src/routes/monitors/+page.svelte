@@ -1,13 +1,11 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { api } from '$lib/api';
-	import { toUTCISO, calendarDateTimeToLuxon, formatDurationMs } from '$lib/utils/formatters';
-	import { getTimezone } from '$lib/state/timezone.svelte';
+	import { formatDurationMs } from '$lib/utils/formatters';
 	import * as Table from '$lib/components/ui/table';
 	import { LoadingCircle } from '$lib/components/ui/loading-circle';
 	import { TracewayTableHeader } from '$lib/components/ui/traceway-table-header';
 	import { TableEmptyState } from '$lib/components/ui/table-empty-state';
-	import { TimeRangePicker } from '$lib/components/ui/time-range-picker';
 	import { SearchBar } from '$lib/components/ui/search-bar';
 	import InfoCallout from '$lib/components/traceway/info-callout.svelte';
 	import TabsRow from '$lib/components/traceway/tabs-row.svelte';
@@ -19,20 +17,12 @@
 	import { browser } from '$app/environment';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { CalendarDate } from '@internationalized/date';
 	import { projectsState } from '$lib/state/projects.svelte';
 	import { monitorsState, type CheckOverview } from '$lib/state/monitors.svelte';
 	import { createRowClickHandler } from '$lib/utils/navigation';
 	import { resolve } from '$app/paths';
 	import PageHeader from '$lib/components/issues/page-header.svelte';
-	import {
-		getTimeRangeFromPreset,
-		dateToCalendarDate,
-		dateToTimeString,
-		parseTimeRangeFromUrl,
-		getResolvedTimeRange,
-		updateUrl
-	} from '$lib/utils/url-params';
+	import { updateUrl } from '$lib/utils/url-params';
 	import {
 		getSortState,
 		setSortState,
@@ -40,10 +30,12 @@
 		type SortDirection
 	} from '$lib/utils/sort-storage';
 
-	const timezone = $derived(getTimezone());
-	const initialTimezone = getTimezone();
-
 	type SortField = 'name' | 'check_type' | 'status' | 'uptime' | 'latency' | 'last_run';
+
+	// Uptime and latency aggregate over a fixed window of recent runs — this
+	// page deliberately has no time filter. Keep in sync with the monitor
+	// detail page, which shows the same window.
+	const WINDOW_DAYS = 30;
 
 	let checks = $state<CheckOverview[]>([]);
 	let loading = $state(true);
@@ -78,9 +70,6 @@
 			url.searchParams.delete('tab');
 		} else {
 			url.searchParams.set('tab', tab);
-			url.searchParams.delete('preset');
-			url.searchParams.delete('from');
-			url.searchParams.delete('to');
 			url.searchParams.delete('search');
 		}
 		goto(url.toString(), { replaceState: true, noScroll: true });
@@ -109,51 +98,21 @@
 	];
 	let typeFilter = $state('');
 
-	function parseMonitorsUrlParams() {
-		if (!browser) return { preset: '24h', from: null, to: null, search: '' };
-		const params = new URLSearchParams(window.location.search);
-		const timeParams = parseTimeRangeFromUrl(timezone, '24h');
-		return { ...timeParams, search: params.get('search') || '' };
+	function parseSearchFromUrl(): string {
+		if (!browser) return '';
+		return new URLSearchParams(window.location.search).get('search') || '';
 	}
 
-	const initialUrlParams = parseMonitorsUrlParams();
-	const initialRange = getResolvedTimeRange(initialUrlParams, initialTimezone);
+	let searchQuery = $state(parseSearchFromUrl());
 
-	let searchQuery = $state(initialUrlParams.search);
-
-	let selectedPreset = $state<string | null>(initialUrlParams.preset);
-	let fromDate = $state<CalendarDate>(dateToCalendarDate(initialRange.from, initialTimezone));
-	let toDate = $state<CalendarDate>(dateToCalendarDate(initialRange.to, initialTimezone));
-	let fromTime = $state(dateToTimeString(initialRange.from, initialTimezone));
-	let toTime = $state(dateToTimeString(initialRange.to, initialTimezone));
-
-	function updateTimeRangeUrl(pushToHistory = true) {
-		const params: Record<string, string | null | undefined> = {};
-		if (selectedPreset) {
-			params.preset = selectedPreset;
-		} else {
-			params.from = getFromDateTimeUTC();
-			params.to = getToDateTimeUTC();
-		}
-		if (searchQuery.trim()) {
-			params.search = searchQuery.trim();
-		}
-		updateUrl(params, { pushToHistory });
+	function updateSearchUrl(pushToHistory = true) {
+		updateUrl({ search: searchQuery.trim() || null }, { pushToHistory });
 	}
 
 	function handlePopState() {
 		const tab = new URLSearchParams(window.location.search).get('tab') || 'monitors';
 		if (tab !== 'monitors') return;
-		const urlParams = parseMonitorsUrlParams();
-		const range = getResolvedTimeRange(urlParams, timezone);
-
-		selectedPreset = urlParams.preset;
-		fromDate = dateToCalendarDate(range.from, timezone);
-		fromTime = dateToTimeString(range.from, timezone);
-		toDate = dateToCalendarDate(range.to, timezone);
-		toTime = dateToTimeString(range.to, timezone);
-		searchQuery = urlParams.search;
-
+		searchQuery = parseSearchFromUrl();
 		loadData(false);
 	}
 
@@ -162,55 +121,18 @@
 	let orderBy = $state<SortField>(initialSort.field as SortField);
 	let sortDirection = $state<SortDirection>(initialSort.direction);
 
-	function getFromDateTimeUTC(): string {
-		const [hour, minute] = (fromTime || '00:00').split(':').map(Number);
-		const dt = calendarDateTimeToLuxon(
-			{ year: fromDate.year, month: fromDate.month, day: fromDate.day, hour, minute },
-			timezone
-		);
-		return toUTCISO(dt);
-	}
-
-	function getToDateTimeUTC(): string {
-		const [hour, minute] = (toTime || '23:59').split(':').map(Number);
-		const dt = calendarDateTimeToLuxon(
-			{ year: toDate.year, month: toDate.month, day: toDate.day, hour, minute },
-			timezone
-		).endOf('minute');
-		return toUTCISO(dt);
-	}
-
-	function handleTimeRangeChange(
-		from: { date: CalendarDate; time: string },
-		to: { date: CalendarDate; time: string },
-		preset: string | null
-	) {
-		fromDate = from.date;
-		fromTime = from.time;
-		toDate = to.date;
-		toTime = to.time;
-		selectedPreset = preset;
-		loadData(false);
-	}
-
 	async function loadData(pushToHistory = true) {
 		loading = true;
 		error = '';
 
-		if (selectedPreset) {
-			const range = getTimeRangeFromPreset(selectedPreset, timezone);
-			fromDate = dateToCalendarDate(range.from, timezone);
-			toDate = dateToCalendarDate(range.to, timezone);
-			fromTime = dateToTimeString(range.from, timezone);
-			toTime = dateToTimeString(range.to, timezone);
-		}
+		updateSearchUrl(pushToHistory);
 
-		updateTimeRangeUrl(pushToHistory);
-
+		const now = new Date();
+		const from = new Date(now.getTime() - WINDOW_DAYS * 24 * 60 * 60 * 1000);
 		try {
 			const response = await api.post(
 				'/synthetics/overview',
-				{ fromDate: getFromDateTimeUTC(), toDate: getToDateTimeUTC() },
+				{ fromDate: from.toISOString(), toDate: now.toISOString() },
 				{ projectId: projectsState.currentProjectId ?? undefined }
 			);
 			checks = response.checks || [];
@@ -231,7 +153,7 @@
 	}
 
 	function handleSearch() {
-		updateTimeRangeUrl(true);
+		updateSearchUrl(true);
 	}
 
 	function uptimePct(check: CheckOverview): number | null {
@@ -325,26 +247,14 @@
 	<InfoCallout>{tabDescriptions[activeTab]}</InfoCallout>
 
 	{#if activeTab === 'monitors'}
-		<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-			<SearchBar
-				placeholder="Search monitors..."
-				bind:value={searchQuery}
-				bind:typeValue={typeFilter}
-				{typeOptions}
-				onSearch={handleSearch}
-				disabled={loading}
-			/>
-			<div class="w-full sm:w-auto">
-				<TimeRangePicker
-					bind:fromDate
-					bind:toDate
-					bind:fromTime
-					bind:toTime
-					bind:preset={selectedPreset}
-					onApply={handleTimeRangeChange}
-				/>
-			</div>
-		</div>
+		<SearchBar
+			placeholder="Search monitors..."
+			bind:value={searchQuery}
+			bind:typeValue={typeFilter}
+			{typeOptions}
+			onSearch={handleSearch}
+			disabled={loading}
+		/>
 
 		{#if loading}
 			<div class="flex h-48 items-center justify-center">
@@ -398,7 +308,7 @@
 								/>
 								<TracewayTableHeader
 									label="Uptime"
-									tooltip="Share of successful probes in the selected time range (missed probes excluded)"
+									tooltip="Share of successful probes over the last 30 days (missed probes excluded)"
 									sortField="uptime"
 									currentSortField={orderBy}
 									{sortDirection}
@@ -407,7 +317,7 @@
 								/>
 								<TracewayTableHeader
 									label="Avg latency"
-									tooltip="Average probe latency in the selected time range"
+									tooltip="Average probe latency over the last 30 days"
 									sortField="latency"
 									currentSortField={orderBy}
 									{sortDirection}
@@ -430,12 +340,7 @@
 								{@const uptime = uptimePct(check)}
 								<Table.Row
 									class="cursor-pointer hover:bg-muted/50"
-									onclick={createRowClickHandler(
-										resolve(`/monitors/${check.id}`),
-										'preset',
-										'from',
-										'to'
-									)}
+									onclick={createRowClickHandler(resolve(`/monitors/${check.id}`))}
 								>
 									<Table.Cell class="max-w-[40%] font-medium break-all whitespace-normal">
 										{check.name}

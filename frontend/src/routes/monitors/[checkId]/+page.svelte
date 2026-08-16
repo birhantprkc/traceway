@@ -1,8 +1,7 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount } from 'svelte';
 	import { api } from '$lib/api';
-	import { toUTCISO, calendarDateTimeToLuxon, formatDurationMs } from '$lib/utils/formatters';
-	import { getTimezone } from '$lib/state/timezone.svelte';
+	import { formatDurationMs } from '$lib/utils/formatters';
 	import * as Table from '$lib/components/ui/table';
 	import * as Card from '$lib/components/ui/card';
 	import * as AlertDialog from '$lib/components/ui/alert-dialog';
@@ -13,14 +12,12 @@
 	import { ErrorDisplay } from '$lib/components/ui/error-display';
 	import { TableEmptyState } from '$lib/components/ui/table-empty-state';
 	import { PaginationFooter } from '$lib/components/ui/pagination-footer';
-	import { TimeRangePicker } from '$lib/components/ui/time-range-picker';
 	import CheckStatusBadge from '$lib/components/synthetics/check-status-badge.svelte';
 	import MonitorTypeBadge from '$lib/components/synthetics/monitor-type-badge.svelte';
 	import MonitorSheet from '../monitor-sheet.svelte';
 	import D3LineChart from '$lib/components/dashboard/d3-line-chart.svelte';
 	import PageHeader from '$lib/components/issues/page-header.svelte';
 	import { browser } from '$app/environment';
-	import { CalendarDate } from '@internationalized/date';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { projectsState } from '$lib/state/projects.svelte';
@@ -33,21 +30,11 @@
 	} from '$lib/state/monitors.svelte';
 	import { createSmartBackHandler } from '$lib/utils/back-navigation';
 	import { authState } from '$lib/state/auth.svelte';
-	import {
-		getTimeRangeFromPreset,
-		dateToCalendarDate,
-		dateToTimeString,
-		parseTimeRangeFromUrl,
-		getResolvedTimeRange,
-		updateUrl
-	} from '$lib/utils/url-params';
 	import { Activity, ChartLine, Check as CheckIcon, History, Pause, Pencil, Play, Trash2, TriangleAlert } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 
 	let { data } = $props();
 
-	const timezone = $derived(getTimezone());
-	const initialTimezone = getTimezone();
 	const checkId = data.checkId;
 
 	let check = $state<SyntheticCheck | null>(null);
@@ -66,8 +53,8 @@
 	let total = $state(0);
 	let totalPages = $state(0);
 
-	// Result filter for the runs table; the date range comes from the page's
-	// TimeRangePicker.
+	// Result filter for the runs table; the date range is the page's fixed
+	// 30-day window.
 	let resultFilter = $state('all');
 	const resultFilterOptions = [
 		{ value: 'all', label: 'All results' },
@@ -90,56 +77,32 @@
 	let runningNow = $state(false);
 	let togglingPause = $state(false);
 
-	const initialUrlParams = browser
-		? parseTimeRangeFromUrl(timezone, '24h')
-		: { preset: '24h' as string | null, from: null, to: null };
-	const initialRange = getResolvedTimeRange(initialUrlParams, initialTimezone);
+	// The whole page shows a fixed window of the most recent runs — no time
+	// filter. The window is refreshed on every load so charts and the run
+	// history stay anchored to "now".
+	const WINDOW_DAYS = 30;
+	const initialTo = new Date();
+	let rangeTo = $state(initialTo);
+	let rangeFrom = $state(new Date(initialTo.getTime() - WINDOW_DAYS * 24 * 60 * 60 * 1000));
 
-	let selectedPreset = $state<string | null>(initialUrlParams.preset);
-	let fromDate = $state<CalendarDate>(dateToCalendarDate(initialRange.from, initialTimezone));
-	let toDate = $state<CalendarDate>(dateToCalendarDate(initialRange.to, initialTimezone));
-	let fromTime = $state(dateToTimeString(initialRange.from, initialTimezone));
-	let toTime = $state(dateToTimeString(initialRange.to, initialTimezone));
-
-	function getFromDateTimeUTC(): string {
-		const [hour, minute] = (fromTime || '00:00').split(':').map(Number);
-		return toUTCISO(
-			calendarDateTimeToLuxon(
-				{ year: fromDate.year, month: fromDate.month, day: fromDate.day, hour, minute },
-				timezone
-			)
-		);
-	}
-
-	function getToDateTimeUTC(): string {
-		const [hour, minute] = (toTime || '23:59').split(':').map(Number);
-		return toUTCISO(
-			calendarDateTimeToLuxon(
-				{ year: toDate.year, month: toDate.month, day: toDate.day, hour, minute },
-				timezone
-			).endOf('minute')
-		);
-	}
-
-	function updateTimeRangeUrl(pushToHistory = true) {
-		const params: Record<string, string | null | undefined> = {};
-		if (selectedPreset) {
-			params.preset = selectedPreset;
-		} else {
-			params.from = getFromDateTimeUTC();
-			params.to = getToDateTimeUTC();
-		}
-		updateUrl(params, { pushToHistory });
-	}
-
-	// Snap to a step that yields ~96 buckets at most, so the availability
-	// strip stays readable for every range (a 3M range at 240m would be 540
-	// cells and overflow the row). The small tolerance keeps a range that is
-	// one endOf-minute epsilon over a boundary on the finer step.
+	// Snap to a step that keeps the availability strip readable for every
+	// range (a 3M range at 240m would be 540 cells and overflow the row).
+	// The bucket target shrinks with the viewport so the strip never forces
+	// the page into horizontal scrolling on phones. The small tolerance keeps
+	// a range that is one endOf-minute epsilon over a boundary on the finer
+	// step.
 	const intervalSteps = [1, 5, 15, 30, 60, 120, 240, 480, 720, 1440];
 
+	function bucketTarget(): number {
+		if (!browser) return 96;
+		// ~7px per cell (4px bar + 3px gap); reserve room for the sidebar and
+		// paddings on desktop, just the paddings on phones.
+		const chrome = window.innerWidth >= 768 ? 380 : 90;
+		return Math.max(24, Math.min(96, Math.floor((window.innerWidth - chrome) / 7)));
+	}
+
 	function calculateInterval(from: Date, to: Date): number {
-		const raw = (to.getTime() - from.getTime()) / 60000 / 96;
+		const raw = (to.getTime() - from.getTime()) / 60000 / bucketTarget();
 		for (const step of intervalSteps) {
 			if (step >= raw - 0.05) return step;
 		}
@@ -165,14 +128,12 @@
 	async function loadSeries() {
 		seriesLoading = true;
 		try {
-			const fromStr = getFromDateTimeUTC();
-			const toStr = getToDateTimeUTC();
 			const response = await api.post(
 				`/synthetics/checks/${checkId}/series`,
 				{
-					fromDate: fromStr,
-					toDate: toStr,
-					intervalMinutes: calculateInterval(new Date(fromStr), new Date(toStr))
+					fromDate: rangeFrom.toISOString(),
+					toDate: rangeTo.toISOString(),
+					intervalMinutes: calculateInterval(rangeFrom, rangeTo)
 				},
 				{ projectId: projectsState.currentProjectId ?? undefined }
 			);
@@ -191,8 +152,8 @@
 			const response = await api.post(
 				`/synthetics/checks/${checkId}/results`,
 				{
-					fromDate: getFromDateTimeUTC(),
-					toDate: getToDateTimeUTC(),
+					fromDate: rangeFrom.toISOString(),
+					toDate: rangeTo.toISOString(),
 					status: resultFilter === 'all' ? '' : resultFilter,
 					pagination: { page, pageSize }
 				},
@@ -209,19 +170,13 @@
 		}
 	}
 
-	async function loadAll(pushToHistory = true) {
+	async function loadAll() {
 		loading = true;
 		error = '';
 		notFound = false;
 
-		if (selectedPreset) {
-			const range = getTimeRangeFromPreset(selectedPreset, timezone);
-			fromDate = dateToCalendarDate(range.from, timezone);
-			toDate = dateToCalendarDate(range.to, timezone);
-			fromTime = dateToTimeString(range.from, timezone);
-			toTime = dateToTimeString(range.to, timezone);
-		}
-		updateTimeRangeUrl(pushToHistory);
+		rangeTo = new Date();
+		rangeFrom = new Date(rangeTo.getTime() - WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
 		await loadCheck();
 		loading = false;
@@ -229,32 +184,6 @@
 			loadSeries();
 			loadResults();
 		}
-	}
-
-	function handlePopState() {
-		const urlParams = parseTimeRangeFromUrl(timezone, '24h');
-		const range = getResolvedTimeRange(urlParams, timezone);
-		selectedPreset = urlParams.preset;
-		fromDate = dateToCalendarDate(range.from, timezone);
-		fromTime = dateToTimeString(range.from, timezone);
-		toDate = dateToCalendarDate(range.to, timezone);
-		toTime = dateToTimeString(range.to, timezone);
-		page = 1;
-		loadAll(false);
-	}
-
-	function handleTimeRangeChange(
-		from: { date: CalendarDate; time: string },
-		to: { date: CalendarDate; time: string },
-		preset: string | null
-	) {
-		fromDate = from.date;
-		fromTime = from.time;
-		toDate = to.date;
-		toTime = to.time;
-		selectedPreset = preset;
-		page = 1;
-		loadAll(false);
 	}
 
 	async function runNow() {
@@ -355,9 +284,9 @@
 	// explicit no-data cells instead of a few bars stretched across the strip.
 	const paddedSeries = $derived.by(() => {
 		if (series.length === 0) return [] as CheckSeriesPoint[];
-		const fromMs = Date.parse(getFromDateTimeUTC());
-		const toMs = Date.parse(getToDateTimeUTC());
-		const stepMs = calculateInterval(new Date(fromMs), new Date(toMs)) * 60000;
+		const fromMs = rangeFrom.getTime();
+		const toMs = rangeTo.getTime();
+		const stepMs = calculateInterval(rangeFrom, rangeTo) * 60000;
 		const byBucket = new Map(series.map((p) => [new Date(p.bucket).getTime(), p]));
 		const cells: CheckSeriesPoint[] = [];
 		for (let t = Math.floor(fromMs / stepMs) * stepMs; t <= toMs && cells.length < 400; t += stepMs) {
@@ -451,14 +380,7 @@
 	}
 
 	onMount(() => {
-		window.addEventListener('popstate', handlePopState);
-		loadAll(false);
-	});
-
-	onDestroy(() => {
-		if (typeof window !== 'undefined') {
-			window.removeEventListener('popstate', handlePopState);
-		}
+		loadAll();
 	});
 </script>
 
@@ -479,33 +401,24 @@
 		status={400}
 		title="Error"
 		description={error}
-		onRetry={() => loadAll(false)}
+		onRetry={() => loadAll()}
 		onBack={createSmartBackHandler({ fallbackPath: '/monitors' })}
 		backLabel="Back to Monitors"
 	/>
 {:else if check}
 	<div class="space-y-4">
-		<div class="flex flex-col gap-4 sm:flex-row sm:justify-between">
+		<div class="flex items-center justify-between gap-4">
 			<PageHeader
 				title={check.name}
 				onBack={createSmartBackHandler({ fallbackPath: '/monitors' })}
 			/>
-			<div class="flex flex-col">
-				<TimeRangePicker
-					bind:fromDate
-					bind:toDate
-					bind:fromTime
-					bind:toTime
-					bind:preset={selectedPreset}
-					onApply={handleTimeRangeChange}
-				/>
-			</div>
+			<span class="shrink-0 text-sm text-muted-foreground">Last {WINDOW_DAYS} days</span>
 		</div>
 
 		<div class="flex flex-wrap items-center gap-3">
 			<CheckStatusBadge status={check.currentStatus} enabled={check.enabled} />
 			<MonitorTypeBadge type={check.checkType} />
-			<span class="font-mono text-sm text-muted-foreground">
+			<span class="min-w-0 font-mono text-sm break-all text-muted-foreground">
 				{#if check.checkType === 'http'}
 					{check.config?.method || 'GET'} {check.config?.url}
 				{:else if check.checkType === 'tcp'}
@@ -599,13 +512,13 @@
 					</div>
 				{:else if series.length === 0}
 					<div class="flex h-16 items-center justify-center text-sm text-muted-foreground">
-						No probe data in this period
+						No probe data in the last {WINDOW_DAYS} days
 					</div>
 				{:else}
 					<div class="flex h-9 items-stretch gap-[3px]">
 						{#each paddedSeries as point}
 							<div
-								class="min-w-[4px] flex-1 rounded-[3px] transition-transform hover:scale-y-110 {bucketClass(
+								class="min-w-0 flex-1 rounded-[3px] transition-transform hover:scale-y-110 {bucketClass(
 									point
 								)}"
 								title={bucketTitle(point)}
@@ -634,7 +547,7 @@
 					</div>
 				{:else if latencySeries[0].data.length === 0}
 					<div class="flex h-[220px] items-center justify-center text-sm text-muted-foreground">
-						No latency data in this period
+						No latency data in the last {WINDOW_DAYS} days
 					</div>
 				{:else}
 					<D3LineChart series={latencySeries} formatValue={formatDurationMs} unit="ms" />
@@ -673,7 +586,7 @@
 					</Table.Body>
 				{:else if results.length === 0}
 					<Table.Body>
-						<TableEmptyState colspan={5} message="No runs in this period" />
+						<TableEmptyState colspan={5} message="No runs in the last {WINDOW_DAYS} days" />
 					</Table.Body>
 				{:else}
 					<Table.Header>
@@ -806,7 +719,7 @@
 		{/if}
 	</div>
 
-	<MonitorSheet bind:open={editOpen} {check} onSaved={() => loadAll(false)} />
+	<MonitorSheet bind:open={editOpen} {check} onSaved={() => loadAll()} />
 
 	<AlertDialog.Root bind:open={deleteOpen}>
 		<AlertDialog.Content interactOutsideBehavior={deleting ? 'ignore' : 'close'}>
