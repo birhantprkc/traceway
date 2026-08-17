@@ -52,11 +52,11 @@
 
 {#if oncall?.team}
 	<div
-		class="inline-flex items-center gap-1.5 rounded-md border bg-muted/50 px-2 py-1 text-xs text-muted-foreground"
+		class="inline-flex max-w-full items-center gap-1.5 self-start rounded-md border bg-muted/50 px-2 py-1 text-xs text-muted-foreground"
 		title={names ? `On call for ${oncall.team.name}: ${names}` : oncall.team.name}
 	>
-		<PhoneCall class="h-3.5 w-3.5" />
-		<span class="whitespace-nowrap">
+		<PhoneCall class="h-3.5 w-3.5 shrink-0" />
+		<span class="min-w-0 truncate">
 			On-call: <span class="font-medium text-foreground">{oncall.team.name}</span>{#if names}
 				<span>{` — ${names}`}</span>{/if}
 		</span>
