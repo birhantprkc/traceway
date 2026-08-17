@@ -6,7 +6,7 @@
 	import { themeState, initTheme, toggleTheme } from '$lib/state/theme.svelte';
 	import { getTimezone } from '$lib/state/timezone.svelte';
 	import { DateTime } from 'luxon';
-	import { incrementNavDepth, decrementNavDepth } from '$lib/utils/back-navigation';
+	import { incrementNavDepth, decrementNavDepth, clearNavDepth } from '$lib/utils/back-navigation';
 	import AppSidebar from '$lib/components/app-sidebar.svelte';
 	import AddProjectModal from '$lib/components/add-project-modal.svelte';
 	import EditProjectModal from '$lib/components/edit-project-modal.svelte';
@@ -134,7 +134,11 @@
 		const newUrl = navigation.to.url;
 		const newPathname = newUrl.pathname;
 
-		if (navigation.type === 'popstate') {
+		if (navigation.type === 'enter') {
+			// Full page load (direct URL or refresh): the in-app history chain is
+			// gone, so smart back buttons must use their fallback path
+			clearNavDepth();
+		} else if (navigation.type === 'popstate') {
 			// Browser back/forward button
 			decrementNavDepth();
 		} else if (newPathname !== lastPathname) {
