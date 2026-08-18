@@ -15,11 +15,11 @@ Each metric point contains:
 
 ## Automatic vs Custom Metrics
 
-**Automatic metrics** are collected without any code changes. The Traceway Go and Node.js SDKs capture CPU usage, memory consumption, goroutine count (Go), and GC statistics at a regular interval (default: 30 seconds). For OpenTelemetry, the available automatic metrics depend on your SDK and instrumentation libraries — for example, the Go OTel runtime instrumentation provides goroutine and memory metrics, while the Node.js OTel runtime instrumentation provides event loop and heap metrics.
+**Automatic metrics** are collected without any code changes. With OpenTelemetry the set depends on your SDK and instrumentation libraries: the Go OTel runtime instrumentation provides goroutine and memory metrics, the Node.js OTel runtime instrumentation provides event loop and heap metrics. For host-level CPU, memory, disk and network, run the [Traceway OTel Agent](/learn/otel-agent).
 
-**Custom metrics** are captured in your application code using `CaptureMetric` or `CaptureMetricWithTags`. Use these for business metrics (orders per minute), resource metrics (queue depth), or performance metrics (external API latency).
+**Custom metrics** are recorded in your application code with an OTel meter (`createCounter`, `createHistogram`, `createObservableGauge`). Use these for business metrics (orders per minute), resource metrics (queue depth), or performance metrics (external API latency).
 
-See the SDK-specific pages for API details: [Go SDK](/client/sdk/metrics) | [Node.js SDK](/client/node-sdk/metrics)
+See [OTel Metrics](/client/otel/metrics) for the mapping and per-language examples, and the [Node.js metrics guide](/client/otel/nodejs/metrics) for a full worked setup.
 
 ## Tags
 
@@ -34,7 +34,7 @@ Common tags include:
 | `queue_name`   | `emails`, `payments`    | Per-queue monitoring            |
 | `environment`  | `production`, `staging` | Environment comparison          |
 
-Tags are captured via `CaptureMetricWithTags` in the Go SDK, or as resource attributes in OpenTelemetry.
+Tags come from the data-point attributes you pass when recording a value, plus the small allowlist of resource attributes Traceway lifts. See [Resource Attributes](/client/otel/metrics#resource-attributes).
 
 ## Visualizing Metrics
 
@@ -60,9 +60,9 @@ This keeps queries fast regardless of the time window.
 ## Creating Your First Dashboard
 
 1. **Open the Dashboards page** and press <kbd>⌘K</kbd> (or click **Add or find dashboards...**) to install a template, pick up a dashboard from another project, or create a blank one
-2. **Add a widget** — Click **Add Metric Widget**, pick a metric from the dropdown, choose an aggregation, and optionally add tag filters or a group-by
-3. **Adjust the time range** — Use the preset buttons or select a custom range to see the data window you need
-4. **Interact** — Hover over data points for exact values, drag-select a region to zoom in, and use the widget menu to move, edit, or delete widgets
+2. **Add a widget**: Click **Add Metric Widget**, pick a metric from the dropdown, choose an aggregation, and optionally add tag filters or a group-by
+3. **Adjust the time range**: Use the preset buttons or select a custom range to see the data window you need
+4. **Interact**: Hover over data points for exact values, drag-select a region to zoom in, and use the widget menu to move, edit, or delete widgets
 
 See [Dashboards](/learn/dashboards) for applying dashboards across projects, editing them as JSON, and importing from Grafana.
 

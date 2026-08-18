@@ -3,16 +3,10 @@ import SdkSelector from "./components/SdkSelector";
 import HiddenItem from "./components/HiddenItem";
 import { useSdk } from "./components/SdkContext";
 
+// Keyed by the first path segment after /client/. Every OTel-based backend guide
+// now lives under /client/otel/*, so the whole backend story is one `otel` entry.
 const SDK_VISIBILITY = {
-  "gin-middleware": "go-gin",
-  "chi-middleware": "go-chi",
-  "fiber-middleware": "go-fiber",
-  "fasthttp-middleware": "go-fasthttp",
-  "http-middleware": "go-http",
-  sdk: "go-",
-  "node-sdk": "js-node",
-  nestjs: "js-nestjs",
-  hono: "js-hono",
+  otel: "otel",
   react: "js-react",
   "react-native": "react-native",
   vue: "js-vue",
@@ -20,12 +14,6 @@ const SDK_VISIBILITY = {
   jquery: "js-jquery",
   "js-sdk": ["js-react", "js-vue", "js-svelte", "js-jquery", "js-generic"],
   openrouter: "openrouter",
-  otel: "otel",
-  cloudflare: "cloudflare",
-  nextjs: "js-nextjs",
-  symfony: "php-symfony",
-  laravel: "php-laravel",
-  django: "python-django",
   flutter: "flutter",
   android: "android",
   ios: "ios",
@@ -64,16 +52,16 @@ export default {
         name="description"
         content="Traceway - Error tracking and monitoring platform"
       />
-      <meta name="theme-color" content="#05070c" />
+      <meta name="theme-color" content="#000000" />
       <meta name="color-scheme" content="dark" />
       <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
       <link rel="alternate icon" href="/favicon.ico" sizes="any" />
       <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     </>
   ),
-  // Electric Indigo (#7c5cff) ≈ hsl(253, 100%, 68%)
-  primaryHue: 253,
-  primarySaturation: 100,
+  // Dashboard blue (oklch(0.546 0.245 262.881) ≈ #2563eb) ≈ hsl(221, 83%, 53%)
+  primaryHue: 221,
+  primarySaturation: 83,
   darkMode: false,
   nextThemes: {
     defaultTheme: "dark",
